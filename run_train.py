@@ -48,6 +48,8 @@ def main():
 
     torch.manual_seed(7)
     torch.cuda.manual_seed(7)
+    
+    model_name = f'GRU4REC_{loss_type}_{optimizer_type}_{lr}'
 
     model = GRU4REC(input_size, hidden_size, output_size,
                     use_cuda = use_cuda,
@@ -58,7 +60,7 @@ def main():
                     dropout_input = dropout_input,
                     dropout_hidden = dropout_hidden)
 
-    model.train(df_train, session_key, time_key, item_key, n_epochs=n_epochs)
+    model.train(df_train, session_key, time_key, item_key, model_name=model_name, n_epochs=n_epochs)
     
 if __name__ == '__main__':
     main()
