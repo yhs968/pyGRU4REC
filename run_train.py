@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import argparse
-from modules.train import GRU4REC
+from modules.model import GRU4REC
 import torch
 
 def main():
