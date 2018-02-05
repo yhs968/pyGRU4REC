@@ -1,92 +1,323 @@
+import time
+import pandas as pd
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-import numpy as np
 from pathlib import Path
+from modules.optimizer import Optimizer
+from modules.loss import LossFunction
+from modules.layer import GRU
+from modules.evaluate import evaluate
 
-class GRU(nn.Module):
+class GRU4REC:
     def __init__(self, input_size, hidden_size, output_size, num_layers = 1,
-                 dropout_hidden = .5, dropout_input = 0, batch_size = 50, use_cuda = True):
+                 optimizer_type = 'Adagrad', lr = .05, weight_decay = 0,
+                 momentum = 0, eps = 1e-6, loss_type = 'TOP1',
+                 clip_grad = -1, dropout_input=.0, dropout_hidden = .5,
+                 batch_size = 50, use_cuda = True, time_sort = False, pretrained = None):
+        '''
+        Args:
+            input_size (int): dimension of the gru input variables
+            hidden_size (int): dimension of the gru hidden units
+            output_size (int): dimension of the gru output variables
+            optimizer_type (str): optimizer type for GRU weights
+            lr (float): learning rate for the optimizer
+            weight_decay (float): weight decay for the optimizer
+            momentum (float): momentum for the optimizer
+            eps (float): eps for the optimizer
+            loss_type (str): type of the loss function to use
+            clip_grad (float): clip the gradient norm at clip_grad. No clipping if clip_grad = -1
+            dropout_input (float): dropout probability for the input layer
+            dropout_hidden (float): dropout probability for the hidden layer
+            batch_size (int): mini-batch size
+            use_cuda (bool): whether you want to use cuda or not
+            time_sort (bool): whether to ensure the the order of sessions is chronological (default: False)
+            pretrained (modules.layer.GRU): pretrained GRU layer, if it exists (default: None)
+        '''
         
-        super().__init__()
+        # Initialize the GRU Layer
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_layers = num_layers
-        self.dropout_input = dropout_input
-        self.dropout_hidden = dropout_hidden
-        
         self.batch_size = batch_size
         self.use_cuda = use_cuda
+        if pretrained is None:
+            self.gru = GRU(input_size, hidden_size, output_size, num_layers,
+                           dropout_input = dropout_input,
+                           dropout_hidden = dropout_hidden,
+                           use_cuda = use_cuda,
+                           batch_size = batch_size)
+        else:
+            self.gru = pretrained
+        # Initialize the optimizer
+        self.optimizer = Optimizer(self.gru.parameters(),
+                                   optimizer_type = optimizer_type,
+                                   weight_decay = weight_decay,
+                                   momentum = momentum,
+                                   eps = eps)
+        # Initialize the loss function
+        self.loss_fn = LossFunction(loss_type, use_cuda)
+        # gradient clipping(optional)
+        self.clip_grad = clip_grad 
+        # etc
+        self.time_sort = time_sort
         
-        self.onehot_buffer = self.init_emb()
-        self.h2o = nn.Linear(hidden_size, output_size)
-        self.tanh = nn.Tanh()
-        self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout = dropout_hidden)
+    def train(self, df, session_key, time_key, item_key, n_epochs=10, save_dir='./models', model_name='GRU4REC'):
+        df, click_offsets, session_idx_arr = GRU4REC.init_data(df, session_key, time_key, item_key, time_sort = self.time_sort)
+        # Time the training process
+        start_time = time.time()
+        for epoch in range(n_epochs):
+            loss = self.run_epoch(df, click_offsets, session_idx_arr)
+            end_time = time.time()
+            wall_clock = (end_time - start_time) / 60
+            print(f'Epoch:{epoch+1:2d}/Loss:{loss:0.3f}/TrainingTime:{wall_clock:0.3f}(min)')
+            start_time = time.time()
+            
+            # Store the intermediate model
+            save_dir = Path(save_dir)
+            
+            model_fname = f'{model_name}_{loss_type}_{optimizer_type}_{lr}_epoch{epoch:d}'
+            torch.save(self.gru.state_dict(), save_dir/model_fname)
         
-        if self.use_cuda:
-            self = self.cuda()
+    def run_epoch(self, df, click_offsets, session_idx_arr):
+        mb_losses = []
+        # initializations
+        iters = np.arange(self.batch_size)
+        maxiter = iters.max()
+        start = click_offsets[session_idx_arr[iters]]
+        end = click_offsets[session_idx_arr[iters]+1]
+        # initialize the hidden state
+        hidden = self.gru.init_hidden().data
         
-    def forward(self, embedded, target, hidden):
+        optimizer = self.optimizer
+        
+        # Start the training loop
+        finished = False
+        n = 0
+        while not finished:
+            minlen = (end-start).min()
+            # Item indices(for embedding) for clicks where the first sessions start
+            idx_target = df.iidx.values[start]
+            for i in range(minlen - 1):
+                # Build inputs, targets, and hidden states
+                idx_input = idx_target
+                idx_target = df.iidx.values[start + i + 1]
+                input = torch.LongTensor(idx_input) #(B) At first, input is a Tensor
+                target = Variable(torch.LongTensor(idx_target)) #(B)
+                if self.use_cuda:
+                    input = input.cuda()
+                    target = target.cuda()
+                # Now, convert into an embedded Variable
+                embedded = self.gru.emb(input)
+                hidden = Variable(hidden)
+                
+                # Go through the GRU layer
+                logit, hidden = self.gru(embedded, target, hidden)
+                
+                # Calculate the mini-batch loss
+                mb_loss = self.loss_fn(logit, target)
+                mb_losses.append(mb_loss.data[0])
+                
+                # flush the gradient b/f backprop
+                optimizer.zero_grad()
+                
+                # Backprop
+                mb_loss.backward()
+                
+                # Gradient Clipping(Optional)
+                if self.clip_grad != -1:
+                    for p in self.gru.parameters():
+                        p.grad.data.clamp_(max=self.clip_grad)
+                
+                # Mini-batch GD
+                optimizer.step()
+                
+                # Detach the hidden state for later reuse
+                hidden = hidden.data
+                
+            # click indices where a particular session meets second-to-last element
+            start = start + (minlen - 1)
+            # see if how many sessions should terminate
+            mask = np.arange(len(iters))[(end-start)<=1]
+            for idx in mask:
+                maxiter += 1
+                if maxiter >= len(click_offsets)-1:
+                    finished = True
+                    break
+                # update the next starting/ending point
+                iters[idx] = maxiter
+                start[idx] = click_offsets[session_idx_arr[maxiter]]
+                end[idx] = click_offsets[session_idx_arr[maxiter]+1]
+            
+            # reset the rnn hidden state to zero after transition
+            if len(mask)!= 0:
+                hidden[:,mask,:] = 0
+
+        avg_epoch_loss = np.mean(mb_losses)
+        
+        return avg_epoch_loss
+    
+    def predict(self, input, target, hidden):
+        # convert the item indices into embeddings
+        embedded = self.gru.emb(input, volatile = True)
+        hidden = Variable(hidden, volatile = True)
+        # forward propagation
+        logits, hidden = self.gru(embedded, target, hidden)
+
+        return logits, hidden
+    
+    def test(self, df_train, df_test, session_key, time_key, item_key,
+         k = 20, batch_size = 50):
         '''
         Args:
-            embedded (B,C): embedded item indices from a session-parallel mini-batch.
-            target (B,): torch.LongTensor of next item indices from a session-parallel mini-batch.
-            
-        Returns:
-            logit (B,B): Variable that stores the logits for the items in the session-parallel mini-batch
+            k: the length of the recommendation list
         '''
-        # Apply dropout to inputs
-        p_drop = torch.Tensor(embedded.size(0),1).fill_(1 - self.dropout_input) #(B,1)
-        mask = Variable(torch.bernoulli(p_drop).expand_as(embedded)) #(B,C)
-        if self.use_cuda: mask = mask.cuda()
-        embedded = embedded * mask #(B,C)
-        embedded = embedded.unsqueeze(0) #(1,B,C)
+        # set the gru layer into inference mode
+        if self.gru.training:
+            self.gru.switch_mode()
         
-        # Go through the GRU layer
-        output, hidden = self.gru(embedded, hidden) #(num_layers,B,H)
+        recalls = []
+        mrrs = []
+
+        # initializations
+        # Build item2idx from train data.
+        iids = df_train[item_key].unique() # unique item ids
+        item2idx = pd.Series(data=np.arange(len(iids)), index=iids)
+        df_test = pd.merge(df_test,
+                           pd.DataFrame({item_key:iids,
+                                        'iidx':item2idx[iids].values}),
+                                        on=item_key,
+                                        how='inner')
+        # Sort the df by time, and then by session ID.
+        df_test.sort_values([session_key, time_key], inplace = True)
+        # Return the offsets of the beginning clicks of each session IDs
+        click_offsets = GRU4REC.get_click_offsets(df_test, session_key)
+        session_idx_arr = GRU4REC.order_session_idx(df_test, session_key, time_key, time_sort = self.time_sort)
+
+        iters = np.arange(batch_size)
+        maxiter = iters.max()
+        start = click_offsets[session_idx_arr[iters]]
+        end = click_offsets[session_idx_arr[iters]+1]
+        hidden = self.gru.init_hidden().data
+
+        # Start the training loop
+        finished = False
+        n = 0
+        while not finished:
+            minlen = (end-start).min()
+            # Item indices(for embedding) for clicks where the first sessions start
+            idx_target = df_test.iidx.values[start]
+            for i in range(minlen - 1):
+                # Build inputs, targets, and hidden states
+                idx_input = idx_target
+                idx_target = df_test.iidx.values[start + i + 1]
+                input = torch.LongTensor(idx_input) #(B) At first, input is a Tensor
+                target = Variable(torch.LongTensor(idx_target), volatile = True) #(B)
+                if self.use_cuda:
+                    input = input.cuda()
+                    target = target.cuda()
+
+                logit, hidden = self.predict(input, target, hidden)
+                recall, mrr = evaluate(logit, target, k)
+                recalls.append(recall)
+                mrrs.append(mrr)
+
+                # Detach the hidden state for later reuse
+                hidden = hidden.data
+
+            # click indices where a particular session meets second-to-last element
+            start = start + (minlen - 1)
+            # see if how many sessions should terminate
+            mask = np.arange(len(iters))[(end-start)<=1]
+            for idx in mask:
+                maxiter += 1
+                if maxiter >= len(click_offsets)-1:
+                    finished = True
+                    break
+                # update the next starting/ending point
+                iters[idx] = maxiter
+                start[idx] = click_offsets[session_idx_arr[maxiter]]
+                end[idx] = click_offsets[session_idx_arr[maxiter]+1]
+
+            # reset the rnn hidden state to zero after transition
+            if len(mask)!= 0:
+                hidden[:,mask,:] = 0
+
+        avg_recall = np.mean(recalls)
+        avg_mrr = np.mean(mrrs)
+        
+        # reset the gru to a training mode
+        self.gru.switch_mode()
+
+        return avg_recall, avg_mrr
+        
+    @staticmethod
+    def init_data(df, session_key, time_key, item_key, time_sort):
         
         '''
-        Sampling on the activation.
-        Scores will be calculated on only the items appearing in this mini-batch.
+        Initialize the training data, carrying out several steps
+        that are necessary for the training
         '''
-        # self.h2o(output): (1,B,H)
-        output = output.view(-1, output.size(-1)) #(B,H)
-        logit = self.tanh(self.h2o(output)) #(B,C)
-        logit = logit[:,target.view(-1)] #(B,B)
-                    
-        return logit, hidden
     
-    def emb(self, input):
+        # add item indices to the dataframe
+        df = GRU4REC.add_item_indices(df, item_key)
+
         '''
-        Returns a one-hot vector corresponding to the input
+        Sort the df by time, and then by session ID.
+        That is, df is sorted by session ID and 
+        clicks within a session are next to each other,
+        where the clicks within a session are time-ordered.
+        '''
+        df.sort_values([session_key, time_key], inplace = True)
+
+        click_offsets = GRU4REC.get_click_offsets(df, session_key)
+        session_idx_arr = GRU4REC.order_session_idx(df, session_key, time_key, time_sort = time_sort)
+
+        return df, click_offsets, session_idx_arr
         
+    @staticmethod
+    def add_item_indices(df, item_key):
+        '''
+        Adds an item index column named "iidx" to the df.
+
         Args:
-            input (B,): torch.LongTensor of item indices
-            
+            df: pd.DataFrame to add the item indices to
+
         Returns:
-            v (B,C): torch.FloatTensor of one-hot vectors
+            df: copy of the original df with item indices
         '''
-        # flush the buffer
-        self.onehot_buffer.zero_()
-        # fill the buffer with 1 where needed
-        index = input.view(-1,1)
-        self.onehot_buffer.scatter_(1, index, 1)
-        
-        v = Variable(self.onehot_buffer)
-        
-        return v.cuda() if self.use_cuda else v
-    
-    def init_emb(self):
+        iids = df[item_key].unique() # unique item ids
+        item2idx = pd.Series(data=np.arange(len(iids)), index=iids)
+        df = pd.merge(df,
+                      pd.DataFrame({item_key:iids,
+                                    'iidx':item2idx[iids].values}),
+                      on=item_key,
+                      how='inner')
+        return df
+
+    @staticmethod
+    def get_click_offsets(df, session_key):
         '''
-        Initialize the one_hot embedding buffer for repeated one-hot embedding
+        Return the offsets of the beginning clicks of each session IDs,
+        where the offset is calculated against the first click of the first session ID.
         '''
-        onehot_buffer = torch.FloatTensor(self.batch_size, self.output_size)
-        if self.use_cuda: onehot_buffer = onehot_buffer.cuda()
-        
-        return onehot_buffer
-    
-    def init_hidden(self):
-        h0 = Variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_size))
-        
-        return h0.cuda() if self.use_cuda else h0
+
+        offsets = np.zeros(df[session_key].nunique()+1, dtype=np.int32)
+        # group & sort the df by session_key and get the offset values
+        offsets[1:] = df.groupby(session_key).size().cumsum()
+
+        return offsets
+
+    @staticmethod
+    def order_session_idx(df, session_key, time_key, time_sort = False):
+
+        if time_sort:
+            # starting time for each sessions, sorted by session IDs
+            sessions_start_time = df.groupby(session_key)[time_key].min().values
+            # order the session indices by session starting times
+            session_idx_arr = np.argsort(sessions_start_time)
+        else:
+            session_idx_arr = np.arange(df[session_key].nunique())
+
+        return session_idx_arr

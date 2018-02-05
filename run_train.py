@@ -17,6 +17,7 @@ def main():
     parser.add_argument('--dropout_input', default=0, type=float)
     parser.add_argument('--dropout_hidden', default=.5, type=float)
     parser.add_argument('--n_epochs', default=10, type=int)
+    parser.add_argument('--time_sort', default=False, type=int)
     args = parser.parse_args()
     
     # Get the arguments
@@ -45,22 +46,23 @@ def main():
     dropout_input = args.dropout_input
     dropout_hidden = args.dropout_hidden
     n_epochs = args.n_epochs
+    time_sort = args.time_sort
 
     torch.manual_seed(7)
     torch.cuda.manual_seed(7)
-    
-    model_name = f'GRU4REC_{loss_type}_{optimizer_type}_{lr}'
 
     model = GRU4REC(input_size, hidden_size, output_size,
                     use_cuda = use_cuda,
                     batch_size = batch_size,
-                    loss_type = 'TOP1',
-                    optimizer_type = 'Adagrad',
-                    lr=.01,
+                    loss_type = loss_type,
+                    optimizer_type = optimizer_type,
+                    lr=lr,
                     dropout_input = dropout_input,
-                    dropout_hidden = dropout_hidden)
+                    dropout_hidden = dropout_hidden,
+                    time_sort = time_sort)
 
-    model.train(df_train, session_key, time_key, item_key, model_name=model_name, n_epochs=n_epochs)
+    save_dir = ''
+    model.train(df_train, session_key, time_key, item_key, save_dir=save_dir , n_epochs=n_epochs)
     
 if __name__ == '__main__':
     main()
