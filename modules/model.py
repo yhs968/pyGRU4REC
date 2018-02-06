@@ -51,12 +51,19 @@ class GRU4REC:
         else:
             self.gru = pretrained
         # Initialize the optimizer
+        self.optimizer_type = optimizer_type
+        self.weight_decay = weight_decay
+        self.momentum = momentum
+        self.lr = lr
+        self.eps = eps
         self.optimizer = Optimizer(self.gru.parameters(),
                                    optimizer_type = optimizer_type,
+                                   lr = lr,
                                    weight_decay = weight_decay,
                                    momentum = momentum,
                                    eps = eps)
         # Initialize the loss function
+        self.loss_type = loss_type
         self.loss_fn = LossFunction(loss_type, use_cuda)
         # gradient clipping(optional)
         self.clip_grad = clip_grad 
@@ -77,7 +84,7 @@ class GRU4REC:
             # Store the intermediate model
             save_dir = Path(save_dir)
             
-            model_fname = f'{model_name}_{loss_type}_{optimizer_type}_{lr}_epoch{epoch:d}'
+            model_fname = f'{model_name}_{self.loss_type}_{self.optimizer_type}_{self.lr}_epoch{epoch+1:d}'
             torch.save(self.gru.state_dict(), save_dir/model_fname)
         
     def run_epoch(self, df, click_offsets, session_idx_arr):

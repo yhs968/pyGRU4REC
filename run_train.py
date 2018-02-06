@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--dropout_hidden', default=.5, type=float)
     parser.add_argument('--n_epochs', default=10, type=int)
     parser.add_argument('--time_sort', default=False, type=int)
+    parser.add_argument('--n_samples', default=-1, type=int)
     args = parser.parse_args()
     
     # Get the arguments
@@ -30,6 +31,11 @@ def main():
 
     df_train = pd.read_csv(PATH_TO_TRAIN, sep='\t', dtype={'ItemId': np.int64})
     df_test = pd.read_csv(PATH_TO_TEST, sep='\t', dtype={'ItemId': np.int64})
+    # sampling, if needed
+    n_samples = args.n_samples
+    if n_samples != -1:
+        df_train = df_train[:n_samples]
+        df_test = df_test[:n_samples]
     
     session_key = 'SessionId'
     time_key = 'Time'
@@ -61,8 +67,7 @@ def main():
                     dropout_hidden = dropout_hidden,
                     time_sort = time_sort)
 
-    save_dir = ''
-    model.train(df_train, session_key, time_key, item_key, save_dir=save_dir , n_epochs=n_epochs)
+    model.train(df_train, session_key, time_key, item_key, n_epochs=n_epochs)
     
 if __name__ == '__main__':
     main()
