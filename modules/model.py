@@ -2,7 +2,6 @@ import time
 import pandas as pd
 import numpy as np
 import torch
-import torch.nn as nn
 from torch.autograd import Variable
 from pathlib import Path
 from modules.optimizer import Optimizer
@@ -123,7 +122,8 @@ class GRU4REC:
                 logit, hidden = self.gru(embedded, target, hidden)
                 
                 # Calculate the mini-batch loss
-                mb_loss = self.loss_fn(logit, target)
+                # mb_loss = self.loss_fn(logit, target)
+                mb_loss = self.loss_fn(logit)
                 mb_losses.append(mb_loss.data[0])
                 
                 # flush the gradient b/f backprop
