@@ -68,9 +68,10 @@ class GRU4REC:
         self.clip_grad = clip_grad 
         # etc
         self.time_sort = time_sort
-        
+
     def train(self, df, session_key, time_key, item_key, n_epochs=10, save_dir='./models', model_name='GRU4REC'):
-        df, click_offsets, session_idx_arr = GRU4REC.init_data(df, session_key, time_key, item_key, time_sort = self.time_sort)
+        df, click_offsets, session_idx_arr = GRU4REC.init_data(df, session_key, time_key, item_key,
+                                                               time_sort=self.time_sort)
         # Time the training process
         start_time = time.time()
         for epoch in range(n_epochs):
@@ -100,7 +101,6 @@ class GRU4REC:
         
         # Start the training loop
         finished = False
-        n = 0
         while not finished:
             minlen = (end-start).min()
             # Item indices(for embedding) for clicks where the first sessions start
@@ -167,8 +167,8 @@ class GRU4REC:
     
     def predict(self, input, target, hidden):
         # convert the item indices into embeddings
-        embedded = self.gru.emb(input, volatile = True)
-        hidden = Variable(hidden, volatile = True)
+        embedded = self.gru.emb(input, volatile=True)
+        hidden = Variable(hidden, volatile=True)
         # forward propagation
         logits, hidden = self.gru(embedded, target, hidden)
 
@@ -197,10 +197,10 @@ class GRU4REC:
                                         on=item_key,
                                         how='inner')
         # Sort the df by time, and then by session ID.
-        df_test.sort_values([session_key, time_key], inplace = True)
+        df_test.sort_values([session_key, time_key], inplace=True)
         # Return the offsets of the beginning clicks of each session IDs
         click_offsets = GRU4REC.get_click_offsets(df_test, session_key)
-        session_idx_arr = GRU4REC.order_session_idx(df_test, session_key, time_key, time_sort = self.time_sort)
+        session_idx_arr = GRU4REC.order_session_idx(df_test, session_key, time_key, time_sort=self.time_sort)
 
         iters = np.arange(batch_size)
         maxiter = iters.max()
@@ -220,7 +220,7 @@ class GRU4REC:
                 idx_input = idx_target
                 idx_target = df_test.iidx.values[start + i + 1]
                 input = torch.LongTensor(idx_input) #(B) At first, input is a Tensor
-                target = Variable(torch.LongTensor(idx_target), volatile = True) #(B)
+                target = Variable(torch.LongTensor(idx_target), volatile=True)  # (B)
                 if self.use_cuda:
                     input = input.cuda()
                     target = target.cuda()
@@ -276,10 +276,10 @@ class GRU4REC:
         clicks within a session are next to each other,
         where the clicks within a session are time-ordered.
         '''
-        df.sort_values([session_key, time_key], inplace = True)
+        df.sort_values([session_key, time_key], inplace=True)
 
         click_offsets = GRU4REC.get_click_offsets(df, session_key)
-        session_idx_arr = GRU4REC.order_session_idx(df, session_key, time_key, time_sort = time_sort)
+        session_idx_arr = GRU4REC.order_session_idx(df, session_key, time_key, time_sort=time_sort)
 
         return df, click_offsets, session_idx_arr
         
@@ -317,7 +317,7 @@ class GRU4REC:
         return offsets
 
     @staticmethod
-    def order_session_idx(df, session_key, time_key, time_sort = False):
+    def order_session_idx(df, session_key, time_key, time_sort=False):
 
         if time_sort:
             # starting time for each sessions, sorted by session IDs

@@ -10,7 +10,7 @@ class LossFunction(nn.Module):
         self.loss_type = loss_type
         self.use_cuda = use_cuda
         if loss_type == 'CrossEntropy':
-            self._loss_fn = SampledCrossEntropyLoss()
+            self._loss_fn = SampledCrossEntropyLoss(use_cuda)
         elif loss_type == 'TOP1':
             self._loss_fn = TOP1Loss()
         elif loss_type == 'BPR':
@@ -21,13 +21,15 @@ class LossFunction(nn.Module):
     def forward(self, logit):
         return self._loss_fn(logit)
 
+
 class SampledCrossEntropyLoss(nn.Module):
     '''
     CrossEntropyLoss with n_classes = batch_size = the number of samples in the session-parallel mini-batch
     '''
-    def __init__(self):
+    def __init__(self, use_cuda):
         super().__init__()
         self.xe_loss = nn.CrossEntropyLoss()
+        self.use_cuda = use_cuda
 
     def forward(self, logit):
         batch_size = logit.size(1)
@@ -35,6 +37,7 @@ class SampledCrossEntropyLoss(nn.Module):
         if self.use_cuda: target = target.cuda()
 
         return self.xe_loss(logit, target)
+
 
 class BPRLoss(nn.Module):
     def __init__(self):

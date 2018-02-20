@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import argparse
-from modules.model import GRU4REC
+from modules.model_simple import GRU4REC
 import torch
 
 
@@ -11,7 +11,7 @@ def main():
     # parse the nn arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--hidden_size', default=100, type=int)
-    parser.add_argument('--num_layers', default=1, type=int)
+    parser.add_argument('--num_layers', default=100, type=int)
     parser.add_argument('--batch_size', default=50, type=int)
     parser.add_argument('--dropout_input', default=0, type=float)
     parser.add_argument('--dropout_hidden', default=.5, type=float)
@@ -19,7 +19,7 @@ def main():
     # parse the optimizer arguments
     parser.add_argument('--optimizer_type', default='Adagrad', type=str)
     parser.add_argument('--lr', default=.01, type=float)
-    parser.add_argument('--weight_decay', default=0, type=float)
+    parser.add_argument('--weight_decay', default=1e-6, type=float)
     parser.add_argument('--momentum', default=0, type=float)
     parser.add_argument('--eps', default=1e-6, type=float)
     # parse the loss type
@@ -32,9 +32,7 @@ def main():
     
     # Get the arguments
     
-    PATH_HOME = Path.home()
-    PATH_PROJ = PATH_HOME/'pyGRU4REC' 
-    PATH_DATA = PATH_PROJ/'data'
+    PATH_DATA = Path('./data')
     train = 'rsc15_train_full.txt'
     test = 'rsc15_test.txt'
     PATH_TO_TRAIN = PATH_DATA / train
@@ -90,7 +88,8 @@ def main():
                     dropout_hidden=dropout_hidden,
                     time_sort=time_sort)
 
-    model.train(df_train, session_key, time_key, item_key, n_epochs=n_epochs)
+    model.init_data(df_train, df_test, session_key=session_key, time_key=time_key, item_key=item_key)
+    model.train(n_epochs=n_epochs, model_name='GRU4REC_SIMPLE')
 
 
 if __name__ == '__main__':
