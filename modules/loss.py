@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 class LossFunction(nn.Module):
     def __init__(self, loss_type='TOP1', use_cuda=True):
+        """ An abstract loss function that can supports custom loss functions compatible with PyTorch."""
         super().__init__()
         self.loss_type = loss_type
         self.use_cuda = use_cuda
@@ -23,10 +24,14 @@ class LossFunction(nn.Module):
 
 
 class SampledCrossEntropyLoss(nn.Module):
-    '''
-    CrossEntropyLoss with n_classes = batch_size = the number of samples in the session-parallel mini-batch
-    '''
+    """ CrossEntropyLoss with n_classes = batch_size = the number of samples in the session-parallel mini-batch """
     def __init__(self, use_cuda):
+        """
+        See Balazs Hihasi(ICLR 2016), pg.5
+
+        Args:
+             use_cuda (bool): whether to use cuda or not
+        """
         super().__init__()
         self.xe_loss = nn.CrossEntropyLoss()
         self.use_cuda = use_cuda
@@ -41,21 +46,20 @@ class SampledCrossEntropyLoss(nn.Module):
 
 class BPRLoss(nn.Module):
     def __init__(self):
+        """
+        See Balazs Hihasi(ICLR 2016), pg.5
+        """
         super().__init__()
-        # self.logsigmoid = nn.LogSigmoid()
 
     def forward(self, logit):
-        '''
-        See Balazs Hihasi(ICLR 2016), pg.5
-        
+        """
         Args:
             logit (BxB): Variable that stores the logits for the items in the mini-batch
                          The first dimension corresponds to the batches, and the second
                          dimension corresponds to sampled number of items to evaluate
-        '''
+        """
 
         # differences between the item scores
-        # diff = logit.diag().diag() - logit
         diff = logit.diag().view(-1, 1).expand_as(logit) - logit
         # final loss
         loss = -torch.mean(F.logsigmoid(diff))
@@ -65,23 +69,21 @@ class BPRLoss(nn.Module):
 
 class TOP1Loss(nn.Module):
     def __init__(self):
+        """
+        See Balazs Hihasi(ICLR 2016), pg.5
+        """
         super().__init__()
-        # self.sigmoid = nn.Sigmoid()
 
     def forward(self, logit):
-        '''
-        See Balazs Hihasi(ICLR 2016), pg.5
-        
+        """
         Args:
             logit (BxB): Variable that stores the logits for the items in the mini-batch
                          The first dimension corresponds to the batches, and the second
                          dimension corresponds to sampled number of items to evaluate
-        '''
+        """
         # differences between the item scores
-        ## diff = -(logit.diag().diag() - logit)
         diff = -(logit.diag().view(-1, 1).expand_as(logit) - logit)
         # final loss
-        # loss = torch.mean(self.sigmoid(difference)) + torch.mean(self.sigmoid(logit ** 2))
         loss = F.sigmoid(diff).mean() + F.sigmoid(logit ** 2).mean()
 
         return loss

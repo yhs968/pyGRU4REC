@@ -4,9 +4,24 @@ from torch.autograd import Variable
 
 
 class GRU(nn.Module):
+
     def __init__(self, input_size, hidden_size, output_size, num_layers=1,
                  dropout_hidden=.5, dropout_input=0, batch_size=50,
                  use_cuda=True, training=True):
+        '''
+        The GRU layer used for the whole GRU4REC model.
+
+        Args:
+            input_size (int): input layer dimension
+            hidden_size (int): hidden layer dimension
+            output_size (int): output layer dimension. Equivalent to the number of classes
+            num_layers (int): the number of GRU layers
+            dropout_hidden (float): dropout probability for the GRU hidden layers
+            dropout_input (float): dropout probability for the GRU input layer
+            batch_size (int): size of the training batch.(required for producing one-hot encodings efficiently)
+            use_cuda (bool): whether to use cuda or not
+            training (bool): whether to set the GRU module to training mode or not. If false, parameters will not be updated.
+        '''
 
         super().__init__()
         self.input_size = input_size
@@ -20,7 +35,7 @@ class GRU(nn.Module):
         self.use_cuda = use_cuda
         self.training = training
 
-        self.onehot_buffer = self.init_emb()
+        self.onehot_buffer = self.init_emb()  # the buffer where the one-hot encodings will be produced from
         self.h2o = nn.Linear(hidden_size, output_size)
         self.tanh = nn.Tanh()
         self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout=dropout_hidden)
@@ -31,7 +46,7 @@ class GRU(nn.Module):
     def forward(self, embedded, target, hidden):
         '''
         Args:
-            embedded (B,C): embedded item indices from a session-parallel mini-batch.
+            embedded (B,C): a batch of embedded item indices from a session-parallel mini-batch.
             target (B,): torch.LongTensor of next item indices from a session-parallel mini-batch.
             
         Returns:
@@ -72,7 +87,7 @@ class GRU(nn.Module):
             input (B,): torch.LongTensor of item indices
             
         Returns:
-            v (B,C): torch.FloatTensor of one-hot vectors
+            one_hot (B,C): torch.FloatTensor of one-hot vectors
         '''
         # flush the buffer
         self.onehot_buffer.zero_()
@@ -80,13 +95,13 @@ class GRU(nn.Module):
         index = input.view(-1, 1)
         self.onehot_buffer.scatter_(1, index, 1)
 
-        v = Variable(self.onehot_buffer, volatile=volatile)
+        one_hot = Variable(self.onehot_buffer, volatile=volatile)
 
-        return v.cuda() if self.use_cuda else v
+        return one_hot.cuda() if self.use_cuda else one_hot
 
     def init_emb(self):
         '''
-        Initialize the one_hot embedding buffer for repeated one-hot embedding
+        Initialize the one_hot embedding buffer, which will be used for producing the one-hot embeddings efficiently
         '''
         onehot_buffer = torch.FloatTensor(self.batch_size, self.output_size)
         if self.use_cuda: onehot_buffer = onehot_buffer.cuda()
@@ -94,11 +109,17 @@ class GRU(nn.Module):
         return onehot_buffer
 
     def init_hidden(self):
+        '''
+        Initialize the hidden state of the GRU
+        '''
         h0 = Variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_size))
 
         return h0.cuda() if self.use_cuda else h0
 
     def switch_mode(self):
+        '''
+        Switch the mode from Training/Test to Test/Training
+        '''
         # update the current mode
         self.training = not self.training
 

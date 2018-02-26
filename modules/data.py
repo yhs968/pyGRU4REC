@@ -6,14 +6,19 @@ from torch.autograd import Variable
 class SessionDataLoader:
     def __init__(self, df, session_key, item_key, time_key, hidden, batch_size=50, training=True,
                  time_sort=False):
-        '''
+        """
+        A class for creating session-parallel mini-batches.
+
         Args:
-             df (pd.DataFrame): dataframe to generate the batches from
+             df (pd.DataFrame): the dataframe to generate the batches from
+             session_key (str): session ID
+             item_key (str): item ID
+             time_key (str): time ID
              batch_size (int): size of the batch
-             hidden (torch.FloatTensor): initial hidden state
+             hidden (torch.FloatTensor): initial hidden state(should be fed from the outside)
              training (bool): whether to generate the batches in the training mode. If False, Variables will be created with the flag `volatile = True`.
              time_sort (bool): whether to sort the sessions by time when generating batches
-        '''
+        """
         self.df = df
 
         self.session_key = session_key
@@ -21,19 +26,19 @@ class SessionDataLoader:
         self.time_key = time_key
 
         self.hidden = hidden
+
         self.batch_size = batch_size
         self.training = training
         self.time_sort = time_sort
 
     def generate_batch(self):
-        '''
-        Args:
-             df (pd.DataFrame): dataframe to generate the batches from
-             batch_size (int): size of the batch
-             hidden (torch.FloatTensor): initial hidden state
-             training (bool): whether to generate the batches in the training mode. If False, Variables will be created with the flag `volatile = True`.
-             time_sort (bool): whether to sort the sessions by time when generating batches
-        '''
+        """ A generator function for producing session-parallel training mini-batches.
+
+        Returns:
+            input (B,C): torch.FloatTensor. Item indices that will be encoded as one-hot vectors later.
+            target (B,): a Variable that stores the target item indices
+            hidden: previous hidden state
+        """
 
         # initializations
         df = self.df
@@ -54,7 +59,7 @@ class SessionDataLoader:
                 # Build inputs, targets, and hidden states
                 idx_input = idx_target
                 idx_target = df.iidx.values[start + i + 1]
-                input = torch.LongTensor(idx_input) #(B) At first, input is a Tensor
+                input = torch.LongTensor(idx_input)  # (B) At first, input is a Tensor
                 if self.training:
                     target = Variable(torch.LongTensor(idx_target))  # (B)
                     hidden = Variable(self.hidden)
@@ -63,9 +68,10 @@ class SessionDataLoader:
                     hidden = Variable(self.hidden, volatile=True)
 
                 yield input, target, hidden
-                ###############################################################################################################
-                # WARNING: after this step, hidden states should be updated from the outside using `update_hidden(hidden.data)`
-                ###############################################################################################################
+                #######################################################################################################
+                # WARNING: after this step, hidden states should be updated from the outside
+                # using `update_hidden(hidden.data)`
+                #######################################################################################################
 
             # click indices where a particular session meets second-to-last element
             start = start + (minlen - 1)
@@ -86,16 +92,14 @@ class SessionDataLoader:
                 self.hidden[:, mask, :] = 0
 
     def update_hidden(self, hidden):
-        '''
-        Update the hidden state from the outside
-        '''
+        """ Update the hidden state from the outside """
         self.hidden = hidden
 
     def get_click_offsets(self, df):
-        '''
+        """
         Return the offsets of the beginning clicks of each session IDs,
         where the offset is calculated against the first click of the first session ID.
-        '''
+        """
 
         session_key = self.session_key
         offsets = np.zeros(df[session_key].nunique() + 1, dtype=np.int32)
@@ -105,9 +109,7 @@ class SessionDataLoader:
         return offsets
 
     def order_session_idx(self, df):
-        '''
-        Order the session indices
-        '''
+        """ Order the session indices """
 
         session_key = self.session_key
         time_key = self.time_key

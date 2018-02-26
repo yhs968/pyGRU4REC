@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import argparse
-from modules.model_simple import GRU4REC
+from modules.model import GRU4REC
 import torch
 
 
@@ -22,8 +22,10 @@ def main():
     parser.add_argument('--weight_decay', default=0, type=float)
     parser.add_argument('--momentum', default=0, type=float)
     parser.add_argument('--eps', default=1e-6, type=float)
+    
     # parse the loss type
     parser.add_argument('--loss_type', default='TOP1', type=str)
+    
     # etc
     parser.add_argument('--n_epochs', default=10, type=int)
     parser.add_argument('--time_sort', default=False, type=bool)
