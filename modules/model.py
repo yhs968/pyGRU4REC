@@ -10,12 +10,14 @@ from modules.layer import GRU
 from modules.evaluate import evaluate
 
 class GRU4REC:
-    def __init__(self, input_size, hidden_size, output_size, num_layers = 1,
-                 optimizer_type = 'Adagrad', lr = .05, weight_decay = 0,
-                 momentum = 0, eps = 1e-6, loss_type = 'TOP1',
-                 clip_grad = -1, dropout_input=.0, dropout_hidden = .5,
-                 batch_size = 50, use_cuda = True, time_sort = False, pretrained = None):
+    def __init__(self, input_size, hidden_size, output_size, num_layers=1,
+                 optimizer_type='Adagrad', lr=.05, weight_decay=0,
+                 momentum=0, eps=1e-6, loss_type='TOP1',
+                 clip_grad=-1, dropout_input=.0, dropout_hidden=.5,
+                 batch_size=50, use_cuda=True, time_sort=False, pretrained=None):
         '''
+        Initialize the GRU4REC Model
+
         Args:
             input_size (int): dimension of the gru input variables
             hidden_size (int): dimension of the gru hidden units
@@ -34,7 +36,7 @@ class GRU4REC:
             time_sort (bool): whether to ensure the the order of sessions is chronological (default: False)
             pretrained (modules.layer.GRU): pretrained GRU layer, if it exists (default: None)
         '''
-        
+
         # Initialize the GRU Layer
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -43,10 +45,10 @@ class GRU4REC:
         self.use_cuda = use_cuda
         if pretrained is None:
             self.gru = GRU(input_size, hidden_size, output_size, num_layers,
-                           dropout_input = dropout_input,
-                           dropout_hidden = dropout_hidden,
-                           use_cuda = use_cuda,
-                           batch_size = batch_size)
+                           dropout_input=dropout_input,
+                           dropout_hidden=dropout_hidden,
+                           use_cuda=use_cuda,
+                           batch_size=batch_size)
         else:
             self.gru = pretrained
         # Initialize the optimizer
@@ -56,20 +58,30 @@ class GRU4REC:
         self.lr = lr
         self.eps = eps
         self.optimizer = Optimizer(self.gru.parameters(),
-                                   optimizer_type = optimizer_type,
-                                   lr = lr,
-                                   weight_decay = weight_decay,
-                                   momentum = momentum,
-                                   eps = eps)
+                                   optimizer_type=optimizer_type,
+                                   lr=lr,
+                                   weight_decay=weight_decay,
+                                   momentum=momentum,
+                                   eps=eps)
         # Initialize the loss function
         self.loss_type = loss_type
         self.loss_fn = LossFunction(loss_type, use_cuda)
         # gradient clipping(optional)
-        self.clip_grad = clip_grad 
+        self.clip_grad = clip_grad
         # etc
         self.time_sort = time_sort
 
     def train(self, df, session_key, time_key, item_key, n_epochs=10, save_dir='./models', model_name='GRU4REC'):
+        '''
+        Args:
+            df (pd.DataFrame): training dataset
+            session_key (str): session ID
+            time_key (str): time ID
+            item_key (str): item ID
+            n_epochs (int):
+            save_dir (str): the path to save the intermediate trained models
+            model_name (str): name of the model
+        '''
         df, click_offsets, session_idx_arr = GRU4REC.init_data(df, session_key, time_key, item_key,
                                                                time_sort=self.time_sort)
         # Time the training process
@@ -80,13 +92,13 @@ class GRU4REC:
             wall_clock = (end_time - start_time) / 60
             print(f'Epoch:{epoch+1:2d}/Loss:{loss:0.3f}/TrainingTime:{wall_clock:0.3f}(min)')
             start_time = time.time()
-            
+
             # Store the intermediate model
             save_dir = Path(save_dir)
-            
+
             model_fname = f'{model_name}_{self.loss_type}_{self.optimizer_type}_{self.lr}_epoch{epoch+1:d}'
             torch.save(self.gru.state_dict(), save_dir/model_fname)
-        
+
     def run_epoch(self, df, click_offsets, session_idx_arr):
         mb_losses = []
         # initializations
@@ -96,9 +108,9 @@ class GRU4REC:
         end = click_offsets[session_idx_arr[iters]+1]
         # initialize the hidden state
         hidden = self.gru.init_hidden().data
-        
+
         optimizer = self.optimizer
-        
+
         # Start the training loop
         finished = False
         while not finished:
@@ -117,32 +129,32 @@ class GRU4REC:
                 # Now, convert into an embedded Variable
                 embedded = self.gru.emb(input)
                 hidden = Variable(hidden)
-                
+
                 # Go through the GRU layer
                 logit, hidden = self.gru(embedded, target, hidden)
-                
+
                 # Calculate the mini-batch loss
                 # mb_loss = self.loss_fn(logit, target)
                 mb_loss = self.loss_fn(logit)
                 mb_losses.append(mb_loss.data[0])
-                
+
                 # flush the gradient b/f backprop
                 optimizer.zero_grad()
-                
+
                 # Backprop
                 mb_loss.backward()
-                
+
                 # Gradient Clipping(Optional)
                 if self.clip_grad != -1:
                     for p in self.gru.parameters():
                         p.grad.data.clamp_(max=self.clip_grad)
-                
+
                 # Mini-batch GD
                 optimizer.step()
-                
+
                 # Detach the hidden state for later reuse
                 hidden = hidden.data
-                
+
             # click indices where a particular session meets second-to-last element
             start = start + (minlen - 1)
             # see if how many sessions should terminate
@@ -156,15 +168,15 @@ class GRU4REC:
                 iters[idx] = maxiter
                 start[idx] = click_offsets[session_idx_arr[maxiter]]
                 end[idx] = click_offsets[session_idx_arr[maxiter]+1]
-            
+
             # reset the rnn hidden state to zero after transition
-            if len(mask)!= 0:
-                hidden[:,mask,:] = 0
+            if len(mask) != 0:
+                hidden[:, mask, :] = 0
 
         avg_epoch_loss = np.mean(mb_losses)
-        
+
         return avg_epoch_loss
-    
+
     def predict(self, input, target, hidden):
         # convert the item indices into embeddings
         embedded = self.gru.emb(input, volatile=True)
@@ -173,7 +185,7 @@ class GRU4REC:
         logits, hidden = self.gru(embedded, target, hidden)
 
         return logits, hidden
-    
+
     def test(self, df_train, df_test, session_key, time_key, item_key,
          k = 20, batch_size = 50):
         '''
@@ -183,7 +195,7 @@ class GRU4REC:
         # set the gru layer into inference mode
         if self.gru.training:
             self.gru.switch_mode()
-        
+
         recalls = []
         mrrs = []
 
@@ -192,10 +204,10 @@ class GRU4REC:
         iids = df_train[item_key].unique() # unique item ids
         item2idx = pd.Series(data=np.arange(len(iids)), index=iids)
         df_test = pd.merge(df_test,
-                           pd.DataFrame({item_key:iids,
-                                        'iidx':item2idx[iids].values}),
-                                        on=item_key,
-                                        how='inner')
+                           pd.DataFrame({item_key: iids,
+                                         'iidx': item2idx[iids].values}),
+                           on=item_key,
+                           how='inner')
         # Sort the df by time, and then by session ID.
         df_test.sort_values([session_key, time_key], inplace=True)
         # Return the offsets of the beginning clicks of each session IDs
@@ -210,7 +222,6 @@ class GRU4REC:
 
         # Start the training loop
         finished = False
-        n = 0
         while not finished:
             minlen = (end-start).min()
             # Item indices(for embedding) for clicks where the first sessions start
@@ -253,20 +264,20 @@ class GRU4REC:
 
         avg_recall = np.mean(recalls)
         avg_mrr = np.mean(mrrs)
-        
+
         # reset the gru to a training mode
         self.gru.switch_mode()
 
         return avg_recall, avg_mrr
-        
+
     @staticmethod
     def init_data(df, session_key, time_key, item_key, time_sort):
-        
+
         '''
         Initialize the training data, carrying out several steps
         that are necessary for the training
         '''
-    
+
         # add item indices to the dataframe
         df = GRU4REC.add_item_indices(df, item_key)
 
@@ -282,7 +293,7 @@ class GRU4REC:
         session_idx_arr = GRU4REC.order_session_idx(df, session_key, time_key, time_sort=time_sort)
 
         return df, click_offsets, session_idx_arr
-        
+
     @staticmethod
     def add_item_indices(df, item_key):
         '''

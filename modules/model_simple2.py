@@ -124,7 +124,6 @@ class GRU4REC:
             embedded = self.gru.emb(input)
             # Go through the GRU layer
             logit, hidden = self.gru(embedded, target, hidden)
-            # update the hidden state for the dataloader
             loader.update_hidden(hidden.data)
             # Calculate the mini-batch loss
             mb_loss = self.loss_fn(logit)
@@ -179,7 +178,6 @@ class GRU4REC:
             embedded = self.gru.emb(input, volatile=True)
             # forward propagation
             logit, hidden = self.gru(embedded, target, hidden)
-            # update the hidden state for the dataloader
             loader.update_hidden(hidden.data)
             # Evaluate the results
             recall, mrr = E.evaluate(logit, target, k)

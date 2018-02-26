@@ -7,7 +7,7 @@ from modules.optimizer import Optimizer
 from modules.loss import LossFunction
 from modules.layer import GRU
 import modules.evaluate as E
-from modules.data import SessionDataLoader
+import modules.misc.generator as G
 
 
 class GRU4REC:
@@ -70,20 +70,6 @@ class GRU4REC:
         # etc
         self.time_sort = time_sort
 
-    def init_data(self, df_train, df_test, session_key, time_key, item_key):
-        '''
-        Initialize the training & test data
-        '''
-
-        # Specify the identifiers
-        self.session_key = session_key
-        self.time_key = time_key
-        self.item_key = item_key
-
-        # Initialize the dataframes into adequate forms
-        self.df_train = self.init_df(df_train, session_key, time_key, item_key)
-        self.df_test = self.init_df(df_test, session_key, time_key, item_key, iids=self.df_train[item_key].unique())
-
     def train(self, n_epochs=10, save_dir='./models', model_name='GRU4REC'):
         # Time the training process
         start_time = time.time()
@@ -103,20 +89,15 @@ class GRU4REC:
     def run_epoch(self):
         # initialize
         mb_losses = []
-        optimizer = self.optimizer
         hidden = self.gru.init_hidden().data
+        optimizer = self.optimizer
 
         # Start the training loop
-        loader = SessionDataLoader(df=self.df_train,
-                                   hidden=hidden,
-                                   session_key=self.session_key,
-                                   item_key=self.item_key,
-                                   time_key=self.time_key,
-                                   batch_size=self.batch_size,
-                                   training=self.gru.training,
-                                   time_sort=self.time_sort)
-
-        for input, target, hidden in loader.generate_batch():
+        for input, target in G.generate_batch(df=self.df_train,
+                                              batch_size=self.batch_size,
+                                              hidden=hidden,
+                                              training=True,
+                                              time_sort=self.time_sort):
             if self.use_cuda:
                 input = input.cuda()
                 target = target.cuda()
@@ -124,8 +105,6 @@ class GRU4REC:
             embedded = self.gru.emb(input)
             # Go through the GRU layer
             logit, hidden = self.gru(embedded, target, hidden)
-            # update the hidden state for the dataloader
-            loader.update_hidden(hidden.data)
             # Calculate the mini-batch loss
             mb_loss = self.loss_fn(logit)
             mb_losses.append(mb_loss.data[0])
@@ -139,6 +118,8 @@ class GRU4REC:
                     p.grad.data.clamp_(max=self.clip_grad)
             # Mini-batch GD
             optimizer.step()
+            # Detach the hidden state for later reuse
+            hidden = hidden.data
 
         avg_epoch_loss = np.mean(mb_losses)
 
@@ -161,17 +142,11 @@ class GRU4REC:
         mrrs = []
         hidden = self.gru.init_hidden().data
 
-        # Start the testing loop
-        loader = SessionDataLoader(df=self.df_test,
-                                   hidden=hidden,
-                                   session_key=self.session_key,
-                                   item_key=self.item_key,
-                                   time_key=self.time_key,
-                                   batch_size=batch_size,
-                                   training=self.gru.training,
-                                   time_sort=self.time_sort)
-
-        for input, target, hidden in loader.generate_batch():
+        for input, target, hidden in G.generate_batch(df=self.df_test,
+                                                      batch_size=batch_size,
+                                                      hidden=hidden,
+                                                      training=False,
+                                                      time_sort=self.time_sort):
             if self.use_cuda:
                 input = input.cuda()
                 target = target.cuda()
@@ -179,8 +154,6 @@ class GRU4REC:
             embedded = self.gru.emb(input, volatile=True)
             # forward propagation
             logit, hidden = self.gru(embedded, target, hidden)
-            # update the hidden state for the dataloader
-            loader.update_hidden(hidden.data)
             # Evaluate the results
             recall, mrr = E.evaluate(logit, target, k)
             recalls.append(recall)
@@ -194,14 +167,27 @@ class GRU4REC:
 
         return avg_recall, avg_mrr
 
+    def init_data(self, df_train, df_test, session_key, time_key, item_key):
+        '''
+        Initialize the training data and test data
+        '''
+
+        # Specify the identifiers
+        self.session_key = session_key
+        self.time_key = time_key
+        self.item_key = item_key
+
+        # Initialize the dataframes into adequate forms
+        self.df_train = self.init_df(df_train, session_key, time_key, item_key)
+        self.df_test = self.init_df(df_test, session_key, time_key, item_key, iids=self.df_train[item_key].unique())
+
     @staticmethod
     def init_df(df, session_key, time_key, item_key, iids=None):
         '''
         Initialize a dataframe.
-        Involves the following 3 steps:
-            1) Renaming the columns
-            2) Adding item indices to the columns
-            3) Sort the df
+        Involves the following steps:
+            1) Adding item indices to the columns
+            2) Sort the df
 
         Args:
             session_key: session identifier
@@ -210,9 +196,6 @@ class GRU4REC:
             iids: unique item ids. Should be `None` if the df is a training set, and should include the
                   ids for the items included in the training set if the df is a test set.
         '''
-
-        # Rename the session IDs, timestamps, and item IDs
-        # df = df.rename(columns={session_key: 'sid', time_key: 't', item_key: 'iid'})
 
         # add item index column named "iidx" to the df
         if iids is None: iids = df[item_key].unique()  # unique item ids
