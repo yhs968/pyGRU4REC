@@ -85,7 +85,7 @@ Args:
 ```
 
 ## Reproducing the results of the original paper
-Actually, the results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference in the
+Actually, the results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch.
 ```
 $ bash run_train.sh
 $ bash run_test.sh
