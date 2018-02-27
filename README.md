@@ -1,6 +1,9 @@
 # pyGRU4REC
 - PyTorch Implementation of the GRU4REC model.
 - Original paper: [Session-based Recommendations with Recurrent Neural Networks(ICLR 2016)](https://arxiv.org/pdf/1511.06939.pdf)
+- This code is mostly a re-implementation of the [original Theano code written by the authors of the GRU4REC paper](https://github.com/hidasib/GRU4Rec). What I did are as below:
+    - Replaced the Theano components with PyTorch
+    - Simplifying and Cleaning the session-parallel mini-batch generation code
 ---
 
 # Environment
@@ -82,6 +85,7 @@ Args:
 ```
 
 ## Reproducing the results of the original paper
+Actually, the results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference in the
 ```
 $ bash run_train.sh
 $ bash run_test.sh
