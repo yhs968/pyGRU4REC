@@ -17,7 +17,7 @@
     - Training set should be named as `train.tsv`
     - Test set should be named as `test.tsv`
 - File Paths
-    - `train.tsv`/`test.tsv` should be located under the `./data` directory. i.e. `data/train.tsv`, `data/test.tsv`
+    - `train.tsv`, `test.tsv` should be located under the `data` directory. i.e. `data/train.tsv`, `data/test.tsv`
 - Contents
     - `train.tsv`, `test.tsv` should be the tsv files that stores the pandas dataframes that satisfy the following requirements(without headers):
         - The 1st column of the tsv file should be the integer Session IDs
@@ -35,10 +35,10 @@ See `example.ipynb` for the full jupyter notebook script that
 - Before using `run_train.py`, I highly recommend that you to take a look at `example.ipynb` to see how the implementation works.
 - Default parameters are the same as the TOP1 loss case in the [GRU4REC paper](https://arxiv.org/pdf/1511.06939.pdf).
 - Intermediate models created from each training epochs will be stored to `models/`, unless specified.
-- The log file will be written to `./logs/train.out`.
+- The log file will be written to `logs/train.out`.
 
 ```
-$ python run_train.py > ./logs/train.out
+$ python run_train.py > logs/train.out
 
 Args:
     --loss_type: Loss function type. Should be one of the 'TOP1', 'BPR', 'CrossEntropy'.(Default: 'TOP1')
@@ -59,8 +59,9 @@ Args:
 ```
 
 ## Testing using `run_test.py`
+- The log file will be written to `logs/test.out`.
 ```
-$ python run_test.py model_file > ./logs/test.out
+$ python run_test.py model_file > logs/test.out
 
 Args:
     model_file: name of the intermediate model under the `./models` directory. e.g. `python run_test.py GRU4REC_TOP1_Adagrad_0.01_epoch10 > ./logs/test.out`
@@ -78,4 +79,4 @@ Args:
     --n_epochs: The number of training epochs to run.(Default: 10)
     --time_sort: Whether to sort the sessions in the training set in a time order.(Default: False)
     --n_samples: The number of samples to use for the training. If -1, all samples in the training set are used.(Default: -1)
-    ```
+```
