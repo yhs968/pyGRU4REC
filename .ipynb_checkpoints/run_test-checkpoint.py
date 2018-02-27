@@ -1,15 +1,22 @@
+from pathlib import Path
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import argparse
+from modules.layer import GRU
 from modules.model import GRU4REC
 import torch
-
+import argparse
 
 def main():
+    parser = argparse.ArgumentParser()
+    
+    # Model filename
+    parser.add_argument('model_file', type=str)
+    
+    # Size of the recommendation list
+    parser.add_argument('--k', default=20, type=int)
     
     # parse the nn arguments
-    parser = argparse.ArgumentParser()
+    
     parser.add_argument('--hidden_size', default=100, type=int)
     parser.add_argument('--num_layers', default=1, type=int)
     parser.add_argument('--batch_size', default=50, type=int)
@@ -30,31 +37,31 @@ def main():
     parser.add_argument('--n_epochs', default=10, type=int)
     parser.add_argument('--time_sort', default=False, type=bool)
     parser.add_argument('--n_samples', default=-1, type=int)
-    args = parser.parse_args()
     
     # Get the arguments
+    args = parser.parse_args()
 
-    PATH_HOME = Path.home()
-    PATH_PROJ = PATH_HOME / 'pyGRU4REC'
-    PATH_DATA = PATH_PROJ / 'data'
-    train = 'rsc15_train_full.txt'
-    test = 'rsc15_test.txt'
-    PATH_TO_TRAIN = PATH_DATA / train
-    PATH_TO_TEST = PATH_DATA / test
+    PATH_DATA = Path('./data')
+    PATH_MODEL = Path('./models')
+    train = 'train.tsv'
+    test = 'test.tsv'
+    PATH_TRAIN = PATH_DATA / train
+    PATH_TEST = PATH_DATA / test
+    
 
-    df_train = pd.read_csv(PATH_TO_TRAIN, sep='\t', dtype={'ItemId': np.int64})
-    df_test = pd.read_csv(PATH_TO_TEST, sep='\t', dtype={'ItemId': np.int64})
+    df_train = pd.read_csv(PATH_TRAIN, sep='\t', names=['SessionId','ItemId','TimeStamp'])
+    df_test = pd.read_csv(PATH_TEST, sep='\t', names=['SessionId','ItemId','TimeStamp'])
 
     # sampling, if needed
     n_samples = args.n_samples
     if n_samples != -1:
         df_train = df_train[:n_samples]
         df_test = df_test[:n_samples]
-    
+        
     session_key = 'SessionId'
-    time_key = 'Time'
     item_key = 'ItemId'
-
+    time_key = 'TimeStamp'
+    
     use_cuda = True
     input_size = df_train[item_key].nunique()
     hidden_size = args.hidden_size
@@ -74,27 +81,37 @@ def main():
    
     n_epochs = args.n_epochs
     time_sort = args.time_sort
+    
+    MODEL_FILE = PATH_MODEL/args.model_file
+    
+    gru = GRU(input_size, hidden_size, output_size,
+          num_layers = num_layers,
+          dropout_input = dropout_input,
+          dropout_hidden = dropout_hidden,
+          batch_size = batch_size,
+          use_cuda = use_cuda)
 
-    torch.manual_seed(7)
-    torch.cuda.manual_seed(7)
+    gru.load_state_dict(torch.load(MODEL_FILE))
 
     model = GRU4REC(input_size, hidden_size, output_size,
-                    num_layers=num_layers,
-                    use_cuda=use_cuda,
-                    batch_size=batch_size,
-                    loss_type=loss_type,
-                    optimizer_type=optimizer_type,
+                    num_layers = num_layers,
+                    dropout_input = dropout_input,
+                    dropout_hidden = dropout_hidden,
+                    batch_size = batch_size,
+                    use_cuda = use_cuda,
+                    loss_type = loss_type,
+                    optimizer_type = optimizer_type,
                     lr=lr,
-                    weight_decay=weight_decay,
                     momentum=momentum,
-                    eps=eps,
-                    dropout_input=dropout_input,
-                    dropout_hidden=dropout_hidden,
-                    time_sort=time_sort)
+                    time_sort=time_sort,
+                    pretrained=gru)
 
     model.init_data(df_train, df_test, session_key=session_key, time_key=time_key, item_key=item_key)
-    model.train(n_epochs=n_epochs, model_name='GRU4REC_SIMPLE')
 
+    k = args.k
+    recall, mrr = model.test(k=k, batch_size=batch_size)
+    result = f'Recall@{k}:{recall:.7f},MRR@{k}:{mrr:.7f}'
+    print(result)
 
 if __name__ == '__main__':
     main()

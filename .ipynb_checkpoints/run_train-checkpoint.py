@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import argparse
-from modules.model_old import GRU4REC
+from modules.model import GRU4REC
 import torch
 
 
@@ -30,20 +30,20 @@ def main():
     parser.add_argument('--n_epochs', default=10, type=int)
     parser.add_argument('--time_sort', default=False, type=bool)
     parser.add_argument('--n_samples', default=-1, type=int)
-    args = parser.parse_args()
+    parser.add_argument('--model_name', default='GRU4REC', type=str)
     
     # Get the arguments
-    
-    PATH_HOME = Path.home()
-    PATH_PROJ = PATH_HOME/'pyGRU4REC' 
-    PATH_DATA = PATH_PROJ/'data'
-    train = 'rsc15_train_full.txt'
-    test = 'rsc15_test.txt'
-    PATH_TO_TRAIN = PATH_DATA / train
-    PATH_TO_TEST = PATH_DATA / test
+    args = parser.parse_args()    
 
-    df_train = pd.read_csv(PATH_TO_TRAIN, sep='\t', dtype={'ItemId': np.int64})
-    df_test = pd.read_csv(PATH_TO_TEST, sep='\t', dtype={'ItemId': np.int64})
+    PATH_DATA = Path('./data')
+    PATH_MODEL = Path('./models')
+    train = 'train.tsv'
+    test = 'test.tsv'
+    PATH_TRAIN = PATH_DATA / train
+    PATH_TEST = PATH_DATA / test
+
+    df_train = pd.read_csv(PATH_TRAIN, sep='\t', names=['SessionId','ItemId','TimeStamp'])
+    df_test = pd.read_csv(PATH_TEST, sep='\t', names=['SessionId','ItemId','TimeStamp'])
 
     # sampling, if needed
     n_samples = args.n_samples
@@ -52,8 +52,8 @@ def main():
         df_test = df_test[:n_samples]
     
     session_key = 'SessionId'
-    time_key = 'Time'
     item_key = 'ItemId'
+    time_key = 'TimeStamp'
 
     use_cuda = True
     input_size = df_train[item_key].nunique()
@@ -92,7 +92,8 @@ def main():
                     dropout_hidden=dropout_hidden,
                     time_sort=time_sort)
 
-    model.train(df_train, session_key, time_key, item_key, n_epochs=n_epochs)
+    model.init_data(df_train, df_test, session_key=session_key, time_key=time_key, item_key=item_key)
+    model.train(n_epochs=n_epochs, model_name=args.model_name, save_dir=PATH_MODEL)
 
 
 if __name__ == '__main__':

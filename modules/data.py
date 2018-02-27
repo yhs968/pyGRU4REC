@@ -54,11 +54,11 @@ class SessionDataLoader:
         while not finished:
             minlen = (end - start).min()
             # Item indices(for embedding) for clicks where the first sessions start
-            idx_target = df.iidx.values[start]
+            idx_target = df.item_idx.values[start]
             for i in range(minlen - 1):
                 # Build inputs, targets, and hidden states
                 idx_input = idx_target
-                idx_target = df.iidx.values[start + i + 1]
+                idx_target = df.item_idx.values[start + i + 1]
                 input = torch.LongTensor(idx_input)  # (B) At first, input is a Tensor
                 if self.training:
                     target = Variable(torch.LongTensor(idx_target))  # (B)
