@@ -80,3 +80,9 @@ Args:
     --time_sort: Whether to sort the sessions in the training set in a time order.(Default: False)
     --n_samples: The number of samples to use for the training. If -1, all samples in the training set are used.(Default: -1)
 ```
+
+## Reproducing the results of the original paper
+```
+$ bash run_train.sh
+$ bash run_test.sh
+```
