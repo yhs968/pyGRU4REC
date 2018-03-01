@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--loss_type', default='TOP1', type=str)
     
     # etc
-    parser.add_argument('--n_epochs', default=10, type=int)
+    parser.add_argument('--n_epochs', default=2, type=int)
     parser.add_argument('--time_sort', default=False, type=bool)
     parser.add_argument('--n_samples', default=-1, type=int)
     parser.add_argument('--model_name', default='GRU4REC', type=str)
