@@ -85,7 +85,8 @@ Args:
 ```
 
 ## Reproducing the results of the original paper
-Actually, the results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch.
+- The results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch.
+- **The results were reproducible within only 2 or 3 epochs**, unlike the [original Theano implementation](https://github.com/hidasib/GRU4Rec/blob/master/gru4rec.py) which runs for 10 epochs by default.
 ```
 $ bash run_train.sh
 $ bash run_test.sh
