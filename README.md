@@ -92,4 +92,5 @@ $ bash run_test.sh
 ```
 
 # ToDo
-- [ ] Multi-GPU training
+- [ ] Multi-GPU training support
+- [ ] Optimize the testing code(too slow)
