@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from .function import emb
 
 
 class GRU(nn.Module):
@@ -36,6 +37,7 @@ class GRU(nn.Module):
         self.training = training
 
         self.onehot_buffer = self.init_emb()  # the buffer where the one-hot encodings will be produced from
+        self.emb_fn = emb.apply
         self.h2o = nn.Linear(hidden_size, output_size)
         self.tanh = nn.Tanh()
         self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout=dropout_hidden)
@@ -43,10 +45,10 @@ class GRU(nn.Module):
         if self.use_cuda:
             self = self.cuda()
 
-    def forward(self, embedded, target, hidden):
+    def forward(self, input, target, hidden):
         '''
         Args:
-            embedded (B,C): a batch of embedded item indices from a session-parallel mini-batch.
+            embedded (B,): a batch of item indices from a session-parallel mini-batch.
             target (B,): torch.LongTensor of next item indices from a session-parallel mini-batch.
             
         Returns:
@@ -55,10 +57,12 @@ class GRU(nn.Module):
             (if self.mode == 'test')
             logit (B,C): Variable that stores the logits for the next items in the session-parallel mini-batch
         '''
+        embedded = self.emb(input)
         if self.training:
             # Apply dropout to inputs when training
             p_drop = torch.Tensor(embedded.size(0), 1).fill_(1 - self.dropout_input)  # (B,1)
-            mask = Variable(torch.bernoulli(p_drop).expand_as(embedded))  # (B,C)
+            mask_data = torch.bernoulli(p_drop).expand_as(embedded)/(1-self.dropout_input)
+            mask = Variable(mask_data)  # (B,C)
             if self.use_cuda: mask = mask.cuda()
             embedded = embedded * mask  # (B,C)
         embedded = embedded.unsqueeze(0)  # (1,B,C)
@@ -79,26 +83,6 @@ class GRU(nn.Module):
 
         return logit, hidden
 
-    def emb(self, input, volatile=False):
-        '''
-        Returns a one-hot vector corresponding to the input
-        
-        Args:
-            input (B,): torch.LongTensor of item indices
-            
-        Returns:
-            one_hot (B,C): torch.FloatTensor of one-hot vectors
-        '''
-        # flush the buffer
-        self.onehot_buffer.zero_()
-        # fill the buffer with 1 where needed
-        index = input.view(-1, 1)
-        self.onehot_buffer.scatter_(1, index, 1)
-
-        one_hot = Variable(self.onehot_buffer, volatile=volatile)
-
-        return one_hot.cuda() if self.use_cuda else one_hot
-
     def init_emb(self):
         '''
         Initialize the one_hot embedding buffer, which will be used for producing the one-hot embeddings efficiently
@@ -107,6 +91,9 @@ class GRU(nn.Module):
         if self.use_cuda: onehot_buffer = onehot_buffer.cuda()
 
         return onehot_buffer
+    
+    def emb(self, input):
+        return self.emb_fn(input, self.onehot_buffer)
 
     def init_hidden(self):
         '''
@@ -115,21 +102,3 @@ class GRU(nn.Module):
         h0 = Variable(torch.zeros(self.num_layers, self.batch_size, self.hidden_size))
 
         return h0.cuda() if self.use_cuda else h0
-
-    def switch_mode(self):
-        '''
-        Switch the mode from Training/Test to Test/Training
-        '''
-        # update the current mode
-        self.training = not self.training
-
-        # print out the current mode
-        mode = 'Training' if self.training else 'Testing'
-        print(f'Switching into {mode} mode.')
-
-        # turn on/off gradient updates
-        for param in self.parameters():
-            param.requires_grad = self.training
-
-        # turn on/off dropouts on hidden layers
-        self.gru.train(self.training)

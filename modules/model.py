@@ -105,6 +105,7 @@ class GRU4REC:
 
     def run_epoch(self):
         """ Run a single training epoch """
+        self.gru.train()
         # initialize
         mb_losses = []
         optimizer = self.optimizer
@@ -124,10 +125,8 @@ class GRU4REC:
             if self.use_cuda:
                 input = input.cuda()
                 target = target.cuda()
-            # Embed the input
-            embedded = self.gru.emb(input)
             # Go through the GRU layer
-            logit, hidden = self.gru(embedded, target, hidden)
+            logit, hidden = self.gru(input, target, hidden)
             ######################## IMPORTANT  #########################
             # update the hidden state for the dataloader from the outside
             #############################################################
@@ -162,8 +161,7 @@ class GRU4REC:
             avg_mrr: mean of the MRR@K over the session-parallel mini-batches
         """
         # set the gru layer into inference mode
-        if self.gru.training:
-            self.gru.switch_mode()
+        self.gru.eval()
         
         recalls = []
         mrrs = []
@@ -183,10 +181,8 @@ class GRU4REC:
             if self.use_cuda:
                 input = input.cuda()
                 target = target.cuda()
-            # Embed the input
-            embedded = self.gru.emb(input, volatile=True)
             # forward propagation
-            logit, hidden = self.gru(embedded, target, hidden)
+            logit, hidden = self.gru(input, target, hidden)
             # update the hidden state for the dataloader
             loader.update_hidden(hidden.data)
             # Evaluate the results
@@ -198,7 +194,7 @@ class GRU4REC:
         avg_mrr = np.mean(mrrs)
         
         # reset the gru to a training mode
-        self.gru.switch_mode()
+        self.gru.train()
 
         return avg_recall, avg_mrr
 

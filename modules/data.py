@@ -35,7 +35,7 @@ class SessionDataLoader:
         """ A generator function for producing session-parallel training mini-batches.
 
         Returns:
-            input (B,C): torch.FloatTensor. Item indices that will be encoded as one-hot vectors later.
+            input (B,): torch.FloatTensor. Item indices that will be encoded as one-hot vectors later.
             target (B,): a Variable that stores the target item indices
             hidden: previous hidden state
         """
@@ -59,11 +59,12 @@ class SessionDataLoader:
                 # Build inputs, targets, and hidden states
                 idx_input = idx_target
                 idx_target = df.item_idx.values[start + i + 1]
-                input = torch.LongTensor(idx_input)  # (B) At first, input is a Tensor
                 if self.training:
+                    input = Variable(torch.LongTensor(idx_input))  # (B)
                     target = Variable(torch.LongTensor(idx_target))  # (B)
                     hidden = Variable(self.hidden)
                 else:
+                    input = Variable(torch.LongTensor(idx_input), volatile=True) 
                     target = Variable(torch.LongTensor(idx_target), volatile=True)  # (B)
                     hidden = Variable(self.hidden, volatile=True)
 
