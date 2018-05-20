@@ -1,9 +1,10 @@
-import pandas as pd
-import numpy as np
 from pathlib import Path
 import argparse
-from modules.model import GRU4REC
+import pandas as pd
+import numpy as np
 import torch
+from modules.model import GRU4REC
+from modules.data import SessionDataset
 
 
 def main():
@@ -27,9 +28,8 @@ def main():
     parser.add_argument('--loss_type', default='TOP1', type=str)
     
     # etc
-    parser.add_argument('--n_epochs', default=2, type=int)
+    parser.add_argument('--n_epochs', default=5, type=int)
     parser.add_argument('--time_sort', default=False, type=bool)
-    parser.add_argument('--n_samples', default=-1, type=int)
     parser.add_argument('--model_name', default='GRU4REC', type=str)
     
     # Get the arguments
@@ -42,21 +42,11 @@ def main():
     PATH_TRAIN = PATH_DATA / train
     PATH_TEST = PATH_DATA / test
 
-    df_train = pd.read_csv(PATH_TRAIN, sep='\t', names=['SessionId','ItemId','TimeStamp'])
-    df_test = pd.read_csv(PATH_TEST, sep='\t', names=['SessionId','ItemId','TimeStamp'])
-
-    # sampling, if needed
-    n_samples = args.n_samples
-    if n_samples != -1:
-        df_train = df_train[:n_samples]
-        df_test = df_test[:n_samples]
-    
-    session_key = 'SessionId'
-    item_key = 'ItemId'
-    time_key = 'TimeStamp'
+    train_dataset = SessionDataset(PATH_TRAIN)
+    test_dataset = SessionDataset(PATH_TEST, itemmap=train_dataset.itemmap)
 
     use_cuda = True
-    input_size = df_train[item_key].nunique()
+    input_size = len(train_dataset.items)
     hidden_size = args.hidden_size
     num_layers = args.num_layers
     output_size = input_size
@@ -76,7 +66,6 @@ def main():
     time_sort = args.time_sort
 
     torch.manual_seed(7)
-    torch.cuda.manual_seed(7)
 
     model = GRU4REC(input_size, hidden_size, output_size,
                     num_layers=num_layers,
@@ -91,10 +80,9 @@ def main():
                     dropout_input=dropout_input,
                     dropout_hidden=dropout_hidden,
                     time_sort=time_sort)
-
-    model.init_data(df_train, df_test, session_key=session_key, time_key=time_key, item_key=item_key)
-    model.train(n_epochs=n_epochs, model_name=args.model_name, save_dir=PATH_MODEL)
-
+    
+    model.train(train_dataset, k=20, n_epochs=n_epochs, model_name=args.model_name, save=True, save_dir=PATH_MODEL)
+    model.test(test_dataset, k=20)
 
 if __name__ == '__main__':
     main()

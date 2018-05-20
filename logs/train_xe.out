@@ -1,11 +1,7 @@
-Model Name:GRU4REC
-Epoch: 1/Loss:5.118/TrainingTime:32.249(min)
-Epoch: 2/Loss:4.908/TrainingTime:32.265(min)
-Epoch: 3/Loss:4.867/TrainingTime:32.248(min)
-Epoch: 4/Loss:4.848/TrainingTime:32.247(min)
-Epoch: 5/Loss:4.836/TrainingTime:32.228(min)
-Epoch: 6/Loss:4.828/TrainingTime:32.246(min)
-Epoch: 7/Loss:4.822/TrainingTime:32.256(min)
-Epoch: 8/Loss:4.817/TrainingTime:32.235(min)
-Epoch: 9/Loss:4.813/TrainingTime:32.214(min)
-Epoch:10/Loss:4.810/TrainingTime:32.254(min)
+Training GRU4REC...
+epoch: 1/loss:5.118/recall:0.502/mrr:0.221/time:22.532
+epoch: 2/loss:4.908/recall:0.599/mrr:0.267/time:22.467
+epoch: 3/loss:4.867/recall:0.613/mrr:0.274/time:22.493
+epoch: 4/loss:4.848/recall:0.619/mrr:0.276/time:22.521
+epoch: 5/loss:4.836/recall:0.622/mrr:0.277/time:22.520
+Test result: loss:5.878/recall:0.177/mrr:0.074/time:0.029

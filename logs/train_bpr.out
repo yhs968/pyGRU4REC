@@ -1,11 +1,9 @@
-Model Name:GRU4REC
-Epoch: 1/Loss:0.270/TrainingTime:81.303(min)
-Epoch: 2/Loss:0.254/TrainingTime:81.339(min)
-Epoch: 3/Loss:0.251/TrainingTime:81.326(min)
-Epoch: 4/Loss:0.249/TrainingTime:80.521(min)
-Epoch: 5/Loss:0.248/TrainingTime:55.388(min)
-Epoch: 6/Loss:0.247/TrainingTime:55.402(min)
-Epoch: 7/Loss:0.246/TrainingTime:55.311(min)
-Epoch: 8/Loss:0.246/TrainingTime:55.325(min)
-Epoch: 9/Loss:0.245/TrainingTime:55.332(min)
-Epoch:10/Loss:0.245/TrainingTime:55.330(min)
+/usr/local/anaconda3/lib/python3.6/site-packages/torch/nn/modules/rnn.py:38: UserWarning: dropout option adds dropout after all but last recurrent layer, so non-zero dropout expects num_layers greater than 1, but got dropout=0.2 and num_layers=1
+  "num_layers={}".format(dropout, num_layers))
+Training GRU4REC...
+epoch: 1/loss:0.270/recall:0.576/mrr:0.239/time:159.764
+epoch: 2/loss:0.254/recall:0.601/mrr:0.255/time:97.311
+epoch: 3/loss:0.251/recall:0.605/mrr:0.259/time:97.471
+epoch: 4/loss:0.249/recall:0.606/mrr:0.260/time:97.447
+epoch: 5/loss:0.248/recall:0.606/mrr:0.260/time:97.450
+Test result: loss:0.566/recall:0.161/mrr:0.069/time:0.087

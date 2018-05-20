@@ -1,13 +1,13 @@
 import time
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
-from pathlib import Path
 from modules.optimizer import Optimizer
 from modules.loss import LossFunction
 from modules.layer import GRU
 import modules.evaluate as E
-from modules.data import SessionDataLoader
+from modules.data import SessionDataset, SessionDataLoader
 
 
 class GRU4REC:
@@ -44,12 +44,13 @@ class GRU4REC:
         self.output_size = output_size
         self.batch_size = batch_size
         self.use_cuda = use_cuda
+        self.device = torch.device('cuda' if use_cuda else 'cpu')
         if pretrained is None:
             self.gru = GRU(input_size, hidden_size, output_size, num_layers,
                            dropout_input=dropout_input,
                            dropout_hidden=dropout_hidden,
-                           use_cuda=use_cuda,
-                           batch_size=batch_size)
+                           batch_size=batch_size,
+                           use_cuda=use_cuda)
         else:
             self.gru = pretrained
 
@@ -75,8 +76,74 @@ class GRU4REC:
 
         # etc
         self.time_sort = time_sort
+        
+        
+    def run_epoch(self, dataset, k=20, training=True):
+        """ Run a single training epoch """
+        start_time = time.time()
+        
+        # initialize
+        losses = []
+        recalls = []
+        mrrs = []
+        optimizer = self.optimizer
+        hidden = self.gru.init_hidden()
+        if not training:
+            self.gru.eval()
+        device = self.device
+        
+        def reset_hidden(hidden, mask):
+            """Helper function that resets hidden state when some sessions terminate"""
+            if len(mask) != 0:
+                hidden[:, mask, :] = 0
+            
+            return hidden
 
-    def train(self, n_epochs=10, save_dir='./models', model_name='GRU4REC'):
+        # Start the training loop
+        loader = SessionDataLoader(dataset, batch_size=self.batch_size)
+
+        for input, target, mask in loader:
+            input = input.to(device)
+            target = target.to(device)
+            # reset the hidden states if some sessions have just terminated
+            hidden = reset_hidden(hidden, mask).detach()
+            # Go through the GRU layer
+            logit, hidden = self.gru(input, target, hidden)
+            # Output sampling
+            logit_sampled = logit[:, target.view(-1)]
+            # Calculate the mini-batch loss
+            loss = self.loss_fn(logit_sampled)
+            with torch.no_grad():
+                recall, mrr = E.evaluate(logit, target, k)
+            losses.append(loss.item())         
+            recalls.append(recall)
+            mrrs.append(mrr)
+            # Gradient Clipping(Optional)
+            if self.clip_grad != -1:
+                for p in self.gru.parameters():
+                    p.grad.data.clamp_(max=self.clip_grad)
+            # Mini-batch GD
+            if training:
+                # Backprop
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad() # flush the gradient after the optimization
+
+        results = dict()
+        results['loss'] = np.mean(losses)
+        results['recall'] = np.mean(recalls)
+        results['mrr'] = np.mean(mrrs)
+        
+        end_time = time.time()
+        results['time'] = (end_time - start_time) / 60
+        
+        if not training:
+            self.gru.train()
+
+        return results
+    
+    
+    def train(self, dataset, k=20, n_epochs=10, save_dir='./models', save=True, model_name='GRU4REC'):
         """
         Train the GRU4REC model on a pandas dataframe for several training epochs,
         and store the intermediate models to the user-specified directory.
@@ -86,169 +153,34 @@ class GRU4REC:
             save_dir (str): the path to save the intermediate trained models
             model_name (str): name of the model
         """
-        print(f'Model Name:{model_name}')
-        # Time the training process
-        start_time = time.time()
+        print(f'Training {model_name}...')
         for epoch in range(n_epochs):
-            loss = self.run_epoch()
-            end_time = time.time()
-            wall_clock = (end_time - start_time) / 60
-            print(f'Epoch:{epoch+1:2d}/Loss:{loss:0.3f}/TrainingTime:{wall_clock:0.3f}(min)')
-            start_time = time.time()
+            results = self.run_epoch(dataset, k=k, training=True)
+            results = [f'{k}:{v:.3f}' for k, v in results.items()]
+            print(f'epoch:{epoch+1:2d}/{"/".join(results)}')
             
             # Store the intermediate model
-            save_dir = Path(save_dir)
-            if not save_dir.exists(): save_dir.mkdir()
-            
-            model_fname = f'{model_name}_{self.loss_type}_{self.optimizer_type}_{self.lr}_epoch{epoch+1:d}'
-            torch.save(self.gru.state_dict(), save_dir/model_fname)
+            if save:
+                save_dir = Path(save_dir)
+                if not save_dir.exists(): save_dir.mkdir()
+                model_fname = f'{model_name}_{self.loss_type}_{self.optimizer_type}_{self.lr}_epoch{epoch+1:d}'
+                torch.save(self.gru.state_dict(), save_dir/model_fname)
+    
 
-    def run_epoch(self):
-        """ Run a single training epoch """
-        self.gru.train()
-        # initialize
-        mb_losses = []
-        optimizer = self.optimizer
-        hidden = self.gru.init_hidden().data
-
-        # Start the training loop
-        loader = SessionDataLoader(df=self.df_train,
-                                   hidden=hidden,
-                                   session_key=self.session_key,
-                                   item_key=self.item_key,
-                                   time_key=self.time_key,
-                                   batch_size=self.batch_size,
-                                   training=self.gru.training,
-                                   time_sort=self.time_sort)
-
-        for input, target, hidden in loader.generate_batch():
-            if self.use_cuda:
-                input = input.cuda()
-                target = target.cuda()
-            # Go through the GRU layer
-            logit, hidden = self.gru(input, target, hidden)
-            ######################## IMPORTANT  #########################
-            # update the hidden state for the dataloader from the outside
-            #############################################################
-            loader.update_hidden(hidden.data)
-            # Calculate the mini-batch loss
-            mb_loss = self.loss_fn(logit)
-            mb_losses.append(mb_loss.data[0])
-            # flush the gradient b/f backprop
-            optimizer.zero_grad()
-            # Backprop
-            mb_loss.backward()
-            # Gradient Clipping(Optional)
-            if self.clip_grad != -1:
-                for p in self.gru.parameters():
-                    p.grad.data.clamp_(max=self.clip_grad)
-            # Mini-batch GD
-            optimizer.step()
-
-        avg_epoch_loss = np.mean(mb_losses)
-
-        return avg_epoch_loss
-
-    def test(self, k=20, batch_size=50):
+    def test(self, dataset, k=20):
         """ Model evaluation
 
         Args:
             k (int): the length of the recommendation list
-            batch_size (int): testing batch_size
 
         Returns:
+            avg_loss: mean of the losses over the session-parallel minibatches
             avg_recall: mean of the Recall@K over the session-parallel mini-batches
             avg_mrr: mean of the MRR@K over the session-parallel mini-batches
+            wall_clock: time took for testing
         """
-        # set the gru layer into inference mode
-        self.gru.eval()
-        
-        recalls = []
-        mrrs = []
-        hidden = self.gru.init_hidden().data
+        results = self.run_epoch(dataset, k=k, training=False)
+        results = [f'{k}:{v:.3f}' for k, v in results.items()]
+        print(f'Test result: {"/".join(results)}')
+    
 
-        # Start the testing loop
-        loader = SessionDataLoader(df=self.df_test,
-                                   hidden=hidden,
-                                   session_key=self.session_key,
-                                   item_key=self.item_key,
-                                   time_key=self.time_key,
-                                   batch_size=batch_size,
-                                   training=self.gru.training,
-                                   time_sort=self.time_sort)
-
-        for input, target, hidden in loader.generate_batch():
-            if self.use_cuda:
-                input = input.cuda()
-                target = target.cuda()
-            # forward propagation
-            logit, hidden = self.gru(input, target, hidden)
-            # update the hidden state for the dataloader
-            loader.update_hidden(hidden.data)
-            # Evaluate the results
-            recall, mrr = E.evaluate(logit, target, k)
-            recalls.append(recall)
-            mrrs.append(mrr)
-
-        avg_recall = np.mean(recalls)
-        avg_mrr = np.mean(mrrs)
-        
-        # reset the gru to a training mode
-        self.gru.train()
-
-        return avg_recall, avg_mrr
-
-    def init_data(self, df_train, df_test, session_key, time_key, item_key):
-        """ Initialize the training & test data.
-
-        The training/test set, session/time/item keys will be stored for later reuse.
-
-        Args:
-            df_train (pd.DataFrame): training set required to retrieve the training item indices.
-            df_test (pd.DataFrame): test set
-            session_key (str): session ID
-            time_key (str): time ID
-            item_key (str): item ID
-        """
-
-        # Specify the identifiers
-        self.session_key = session_key
-        self.time_key = time_key
-        self.item_key = item_key
-
-        # Initialize the dataframes into adequate forms
-        self.df_train = self.init_df(df_train, session_key, time_key, item_key)
-        self.df_test = self.init_df(df_test, session_key, time_key, item_key, item_ids=df_train[item_key].unique())
-
-    @staticmethod
-    def init_df(df, session_key, time_key, item_key, item_ids=None):
-        """ Initialize the dataframe.
-
-        Involves the following steps:
-            1) Add new item indices to the dataframe
-            2) Sort the df
-
-        Args:
-            session_key: session identifier
-            time_key: timestamp
-            item_key: item identifier
-            item_ids: unique item ids. Should be `None` if the df is a training set, and should include the
-                  ids for the items included in the training set if the df is a test set.
-        """
-
-        # add item index column named "item_idx" to the df
-        if item_ids is None: item_ids = df[item_key].unique()  # unique item ids
-        item2idx = pd.Series(data=np.arange(len(item_ids)), index=item_ids)
-        df = pd.merge(df,
-                      pd.DataFrame({item_key: item_ids,
-                                    'item_idx': item2idx[item_ids].values}),
-                      on=item_key,
-                      how='inner')
-
-        """
-        Sort the df by time, and then by session ID. That is, df is sorted by session ID and
-        clicks within a session are next to each other, where the clicks within a session are time-ordered.
-        """
-        df.sort_values([session_key, time_key], inplace=True)
-
-        return df

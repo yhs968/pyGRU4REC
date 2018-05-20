@@ -5,12 +5,21 @@
     - Replaced the Theano components with PyTorch
     - Simplifying and Cleaning the session-parallel mini-batch generation code
 ---
+# Update(05/20/2018)
+- PyTorch 0.4.0 support
+    - The code is now compatible with PyTorch >= 0.4.0
+- Code cleanup
+    - Removed redundant pieces of code thanks to simpler API of PyTorch 0.4.0
+    - Improved the readablility of the confusing rnn updating routine
+    - Improved the readability of the training/testing routine
+- Optimization
+    - Testing code is now much faster than before
 
 # Environment
-- Python 3.6.3
-- PyTorch 0.3.0.post4
-- pandas 0.20.3
-- numpy 1.13.3
+- **PyTorch 0.4.0**
+- Python 3.6.4
+- pandas 0.22.0
+- numpy 1.14.0
 ---
 
 # Usage
@@ -30,12 +39,11 @@
 ## Training/Testing using Jupyter Notebook
 See `example.ipynb` for the full jupyter notebook script that
 1. Loads the data
-2. Trains a GRU4REC model
-3. Load the trained GRU4REC model
-4. Tests a GRU4REC model
+2. Trains & tests a GRU4REC model
+3. Loads & tests a pretrained GRU4REC model
 
-## Training using `run_train.py`
-- Before using `run_train.py`, I highly recommend that you to take a look at `example.ipynb` to see how the implementation works.
+## Training & Testing using `run_train.py`
+- Before using `run_train.py`, I highly recommend that you to take a look at `example.ipynb` to see how the implementation works in general.
 - Default parameters are the same as the TOP1 loss case in the [GRU4REC paper](https://arxiv.org/pdf/1511.06939.pdf).
 - Intermediate models created from each training epochs will be stored to `models/`, unless specified.
 - The log file will be written to `logs/train.out`.
@@ -58,40 +66,11 @@ Args:
     --eps: eps parameter for the optimizer.(Default: 1e-6)
     --n_epochs: The number of training epochs to run.(Default: 10)
     --time_sort: Whether to sort the sessions in the dataset in a time order.(Default: False)
-    --n_samples: The number of samples to use for the training. If -1, all samples in the training set are used.(Default: -1)
-```
-
-## Testing using `run_test.py`
-- The log file will be written to `logs/test.out`.
-```
-$ python run_test.py model_file > logs/test.out
-
-Args:
-    model_file: name of the intermediate model under the `./models` directory. e.g. `python run_test.py GRU4REC_TOP1_Adagrad_0.01_epoch10 > ./logs/test.out`
-    --loss_type: Loss function type. Should be one of 'TOP1', 'BPR', 'CrossEntropy'.(Default: 'TOP1')
-    --hidden_size: The dimension of the hidden layer of the GRU.(Default: 100)
-    --num_layers: The number of layers for the GRU.(Default: 1)
-    --batch_size: Training batch size.(Default: 50)
-    --dropout_input: Dropout probability of the input layer of the GRU.(Default: 0)
-    --dropout_hidden: Dropout probability of the hidden layer of the GRU.(Default: .5)
-    --optimizer_type: Optimizer type. Should be one of 'Adagrad', 'RMSProp', 'Adadelta', 'Adam', 'SGD'(Default: 'Adagrad')
-    --lr: Learning rate for the optimizer.(Default: 0.01)
-    --weight_decay: Weight decay for the optimizer.(Default: 0)
-    --momentum: Momentum for the optimizer.(Default: 0)
-    --eps: eps parameter for the optimizer.(Default: 1e-6)
-    --n_epochs: The number of training epochs to run.(Default: 10)
-    --time_sort: Whether to sort the sessions in the training set in a time order.(Default: False)
-    --n_samples: The number of samples to use for the training. If -1, all samples in the training set are used.(Default: -1)
 ```
 
 ## Reproducing the results of the original paper
-- The results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch.
+- The results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch & the fact that dropout has no effect in my single-layered PyTorch GRU implementation.
 - **The results were reproducible within only 2 or 3 epochs**, unlike the [original Theano implementation](https://github.com/hidasib/GRU4Rec/blob/master/gru4rec.py) which runs for 10 epochs by default.
 ```
 $ bash run_train.sh
-$ bash run_test.sh
 ```
-
-# ToDo
-- [ ] Multi-GPU training support
-- [ ] Optimize the testing code(too slow)
