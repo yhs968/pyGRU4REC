@@ -5,6 +5,12 @@
     - Replaced the Theano components with PyTorch
     - Simplifying and Cleaning the session-parallel mini-batch generation code
 ---
+# Notice on the potential bug(06/12/2018)
+- [It seems that there is a bug in the updated version(05/20/2018) of the code.](https://github.com/yhs-968/pyGRU4REC/issues/3)
+However, I'm too busy these days, so I won't be able to resolve the issue for a while.(not until July)
+Sorry for the inconvenience.
+
+---
 # Update(05/20/2018)
 - PyTorch 0.4.0 support
     - The code is now compatible with PyTorch >= 0.4.0
