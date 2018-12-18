@@ -54,9 +54,10 @@ class BPRLoss(nn.Module):
     def forward(self, logit):
         """
         Args:
-            logit (BxB): Variable that stores the logits for the items in the mini-batch
-                         The first dimension corresponds to the batches, and the second
-                         dimension corresponds to sampled number of items to evaluate
+            logit (BxB): Variable that stores the logits for the items in the session-parallel mini-batch.
+                         Negative samples are drawn from the items in the session-parallel minibatch,
+                         as mentioned in the original GRU4REC paper. The first dimension corresponds to the batches,
+                         and the second dimension corresponds to sampled number of items to evaluate.
         """
 
         # differences between the item scores
@@ -77,9 +78,10 @@ class TOP1Loss(nn.Module):
     def forward(self, logit):
         """
         Args:
-            logit (BxB): Variable that stores the logits for the items in the mini-batch
-                         The first dimension corresponds to the batches, and the second
-                         dimension corresponds to sampled number of items to evaluate
+            logit (BxB): Variable that stores the logits for the items in the session-parallel mini-batch.
+                         Negative samples are drawn from the items in the session-parallel minibatch,
+                         as mentioned in the original GRU4REC paper. The first dimension corresponds to the batches,
+                         and the second dimension corresponds to sampled number of items to evaluate.
         """
         # differences between the item scores
         diff = -(logit.diag().view(-1, 1).expand_as(logit) - logit)
