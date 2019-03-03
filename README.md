@@ -1,3 +1,7 @@
+# ※ Disclaimer
+- A critical bug is suspected in this code. See the update log for 03/02/2019.
+- I recommend to refer to the [original author's implementation](https://github.com/hidasib/GRU4Rec).
+
 # pyGRU4REC
 - PyTorch Implementation of the GRU4REC model.
 - Original paper: [Session-based Recommendations with Recurrent Neural Networks(ICLR 2016)](https://arxiv.org/pdf/1511.06939.pdf)
@@ -5,12 +9,12 @@
     - Replaced the Theano components with PyTorch
     - Simplifying and Cleaning the session-parallel mini-batch generation code
 
-
-# Update(12/29/2018)
-- A critical bug was reported in https://github.com/yhs-968/pyGRU4REC/issues/6. I'm planning to fix that bug within 3 weeks.
-- I'm also planning to recover embedding layer support.(https://github.com/yhs-968/pyGRU4REC/issues/4)
-- Overall, the code will be further optimized for production/large-scale experiments.
-
+# Update(03/02/2019)
+- PyTorch 1.0 migration
+- Code optimization
+    - replaced the pandas dataframe component with numpy array for speedup
+- **Somehow, the model failed to retrieve the original performance reported in the first version of the implementation.(potential bug)**
+    - However, I do not have plans to fix this bug in the near future due to contraint in time & computational resource.
 
 # Update(05/20/2018)
 - PyTorch 0.4.0 support
@@ -76,8 +80,9 @@ Args:
 ```
 
 ## Reproducing the results of the original paper
-- The results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch & the fact that dropout has no effect in my single-layered PyTorch GRU implementation.
-- **The results were reproducible within only 2 or 3 epochs**, unlike the [original Theano implementation](https://github.com/hidasib/GRU4Rec/blob/master/gru4rec.py) which runs for 10 epochs by default.
+<S>- The results from this PyTorch Implementation gives a slightly better result compared to the [original code](https://github.com/hidasib/GRU4Rec) that was written in Theano. I guess this comes from the difference between Theano and PyTorch & the fact that dropout has no effect in my single-layered PyTorch GRU implementation.
+- **The results were reproducible within only 2 or 3 epochs**, unlike the [original Theano implementation](https://github.com/hidasib/GRU4Rec/blob/master/gru4rec.py) which runs for 10 epochs by default.</S>
 ```
 $ bash run_train.sh
 ```
+- (03/02/2019) The results are now far worse than the original GRU4REC paper(recall 0.33 mrr 0.183). I suspect that there is a critical bug in the updated version of the code. However, due to the constraint in time & computational resource, I'm not planning to fix this in near future.
