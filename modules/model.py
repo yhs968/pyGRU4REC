@@ -14,7 +14,7 @@ class GRU4REC:
     def __init__(self, input_size, hidden_size, output_size, num_layers=1,
                  optimizer_type='Adagrad', lr=.01, weight_decay=0,
                  momentum=0, eps=1e-6, loss_type='TOP1',
-                 clip_grad=-1, dropout_input=.0, dropout_hidden=.5,
+                 clip_grad=-1, p_dropout_input=.0, p_dropout_hidden=.5,
                  batch_size=50, use_cuda=True, time_sort=False, pretrained=None):
         """ The GRU4REC model
 
@@ -30,8 +30,8 @@ class GRU4REC:
             eps (float): eps for the optimizer
             loss_type (str): type of the loss function to use
             clip_grad (float): clip the gradient norm at clip_grad. No clipping if clip_grad = -1
-            dropout_input (float): dropout probability for the input layer
-            dropout_hidden (float): dropout probability for the hidden layer
+            p_dropout_input (float): dropout probability for the input layer
+            p_dropout_hidden (float): dropout probability for the hidden layer
             batch_size (int): mini-batch size
             use_cuda (bool): whether you want to use cuda or not
             time_sort (bool): whether to ensure the the order of sessions is chronological (default: False)
@@ -47,8 +47,8 @@ class GRU4REC:
         self.device = torch.device('cuda' if use_cuda else 'cpu')
         if pretrained is None:
             self.gru = GRU(input_size, hidden_size, output_size, num_layers,
-                           dropout_input=dropout_input,
-                           dropout_hidden=dropout_hidden,
+                           p_dropout_input=p_dropout_input,
+                           p_dropout_hidden=p_dropout_hidden,
                            batch_size=batch_size,
                            use_cuda=use_cuda)
         else:
@@ -69,7 +69,7 @@ class GRU4REC:
 
         # Initialize the loss function
         self.loss_type = loss_type
-        self.loss_fn = LossFunction(loss_type, use_cuda)
+        self.loss_fn = LossFunction(loss_type)
 
         # gradient clipping(optional)
         self.clip_grad = clip_grad 

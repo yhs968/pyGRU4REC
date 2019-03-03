@@ -113,18 +113,22 @@ class SessionDataLoader:
         start = click_offsets[session_idx_arr[iters]]
         end = click_offsets[session_idx_arr[iters] + 1]
         mask = [] # indicator for the sessions to be terminated
-        finished = False        
+        finished = False
+        
+        item_idx = df.item_idx.values
 
         while not finished:
             minlen = (end - start).min()
             # Item indices(for embedding) for clicks where the first sessions start
-            idx_target = df.item_idx.values[start]
+            idx_target = item_idx[start]
             for i in range(minlen - 1):
                 # Build inputs & targets
                 idx_input = idx_target
-                idx_target = df.item_idx.values[start + i + 1]
+                idx_target = item_idx[start + i + 1]
                 input = torch.LongTensor(idx_input)
                 target = torch.LongTensor(idx_target)
+                # stop flushing the hidden state after the first step
+                if i == 1: mask = []
                 yield input, target, mask
                 
             # click indices where a particular session meets second-to-last element

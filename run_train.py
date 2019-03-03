@@ -14,8 +14,8 @@ def main():
     parser.add_argument('--hidden_size', default=100, type=int)
     parser.add_argument('--num_layers', default=1, type=int)
     parser.add_argument('--batch_size', default=50, type=int)
-    parser.add_argument('--dropout_input', default=0, type=float)
-    parser.add_argument('--dropout_hidden', default=.5, type=float)
+    parser.add_argument('--p_dropout_input', default=0, type=float)
+    parser.add_argument('--p_dropout_hidden', default=.5, type=float)
 
     # parse the optimizer arguments
     parser.add_argument('--optimizer_type', default='Adagrad', type=str)
@@ -28,7 +28,7 @@ def main():
     parser.add_argument('--loss_type', default='TOP1', type=str)
     
     # etc
-    parser.add_argument('--n_epochs', default=5, type=int)
+    parser.add_argument('--n_epochs', default=10, type=int)
     parser.add_argument('--time_sort', default=False, type=bool)
     parser.add_argument('--model_name', default='GRU4REC', type=str)
     
@@ -51,8 +51,8 @@ def main():
     num_layers = args.num_layers
     output_size = input_size
     batch_size = args.batch_size
-    dropout_input = args.dropout_input
-    dropout_hidden = args.dropout_hidden
+    p_dropout_input = args.p_dropout_input
+    p_dropout_hidden = args.p_dropout_hidden
     
     loss_type = args.loss_type
     
@@ -77,8 +77,8 @@ def main():
                     weight_decay=weight_decay,
                     momentum=momentum,
                     eps=eps,
-                    dropout_input=dropout_input,
-                    dropout_hidden=dropout_hidden,
+                    p_dropout_input=p_dropout_input,
+                    p_dropout_hidden=p_dropout_hidden,
                     time_sort=time_sort)
     
     model.train(train_dataset, k=20, n_epochs=n_epochs, model_name=args.model_name, save=True, save_dir=PATH_MODEL)

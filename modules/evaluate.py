@@ -21,11 +21,10 @@ def get_recall(indices, targets):
 
 def get_mrr(indices, targets):
     """ Calculates the MRR score for the given predictions and targets
-
+    
     Args:
         indices (Bxk): torch.LongTensor. top-k indices predicted by the model.
         targets (B): torch.LongTensor. actual target indices.
-
     Returns:
         mrr (float): the mrr score
     """
@@ -37,6 +36,7 @@ def get_mrr(indices, targets):
     ranks = ranks.float()
     rranks = torch.reciprocal(ranks)  # reciprocal ranks
     mrr = torch.sum(rranks).data / targets.size(0)
+    mrr = mrr.item()
     
     return mrr
 

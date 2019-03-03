@@ -5,7 +5,7 @@ import torch.nn as nn
 class GRU(nn.Module):
 
     def __init__(self, input_size, hidden_size, output_size, num_layers=1,
-                 dropout_hidden=.5, dropout_input=0, batch_size=50, use_cuda=True):
+                 p_dropout_hidden=0, p_dropout_input=0, batch_size=50, use_cuda=True):
         '''
         The GRU layer used for the whole GRU4REC model.
 
@@ -14,8 +14,8 @@ class GRU(nn.Module):
             hidden_size (int): hidden layer dimension
             output_size (int): output layer dimension. Equivalent to the number of classes
             num_layers (int): the number of GRU layers
-            dropout_hidden (float): dropout probability for the GRU hidden layers
-            dropout_input (float): dropout probability for the GRU input layer
+            p_dropout_hidden (float): dropout probability for the GRU hidden layers
+            p_dropout_input (float): dropout probability for the GRU input layer
             batch_size (int): size of the training batch.(required for producing one-hot encodings efficiently)
             use_cuda (bool): whether to use cuda or not
             training (bool): whether to set the GRU module to training mode or not. If false, parameters will not be updated.
@@ -26,8 +26,8 @@ class GRU(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.num_layers = num_layers
-        self.dropout_input = dropout_input
-        self.dropout_hidden = dropout_hidden
+        self.p_dropout_input = p_dropout_input
+        self.dropout_hidden = nn.Dropout(p_dropout_hidden)
 
         self.batch_size = batch_size
         self.use_cuda = use_cuda
@@ -36,7 +36,7 @@ class GRU(nn.Module):
         self.onehot_buffer = self.init_emb()  # the buffer where the one-hot encodings will be produced from
         self.h2o = nn.Linear(hidden_size, output_size)
         self.tanh = nn.Tanh()
-        self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout=dropout_hidden)
+        self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout=p_dropout_hidden if num_layers > 1 else 0)
         
         self = self.to(self.device)
         
@@ -52,20 +52,21 @@ class GRU(nn.Module):
             hidden: GRU hidden state
         '''
         embedded = self.onehot_encode(input)
-        if self.training and self.dropout_input > 0: embedded = self.embedding_dropout(embedded)
+        if self.training and self.p_dropout_input > 0: embedded = self.input_dropout(embedded)
         embedded = embedded.unsqueeze(0)  # (1,B,C)
 
         # Go through the GRU layer
         output, hidden = self.gru(embedded, hidden)  # (num_layers,B,H)
         output = output.view(-1, output.size(-1))  # (B,H)
+        output = self.dropout_hidden(output) # hidden layer dropout
         logit = self.tanh(self.h2o(output))  # (B,C)
 
         return logit, hidden
     
     
-    def embedding_dropout(self, input):
-        p_drop = torch.Tensor(input.size(0), 1).fill_(1 - self.dropout_input)  # (B,1)
-        mask = torch.bernoulli(p_drop).expand_as(input)/(1-self.dropout_input) # (B,C)
+    def input_dropout(self, input):
+        p_drop = torch.Tensor(input.size(0), 1).fill_(1 - self.p_dropout_input)  # (B,1)
+        mask = torch.bernoulli(p_drop).expand_as(input)/(1-self.p_dropout_input) # (B,C)
         mask = mask.to(self.device)
         input = input * mask  # (B,C)
         
